@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="/js/script.js" type="text/javascript"></script>
+    <title>Movie API documentation</title>
+</head>
+<body>
+    <h1>Movie API Documentation</h1>
+
+    <h2>Endpoints</h2>
+
+    <p><b>GET /collection/films</b> - Get all films from collection</p>
+    <p><b>GET /collection/films/:programid</b> - Get a single film by programid</p>
+    <p><b>GET /sql/collection/films</b> - Get all films from sql database</p>
+    <p><b>GET /sql/collection/films/:programid</b> - Get a single film by programid from sql database</p>
+    <p><b>GET /collection/stream/:programid</b> - stream a film by programid</p>
+    <p><b>POST /collection/films</b> - Create a new film</p>
+    <p><b>PUT /collection/films/:programid</b> - Update a film by programid</p>
+    <p><b>DELETE /collection/films/:programid</b> - Delete a film by programid</p>
+
+    <h3>List of films programid's:</h3>
+    <ul id="films"></ul>
+    <h2>Example Usage</h2>
+    <p>Get all films:</p>    
+    <pre>
+        fetch('/collection/films').then(res => res.json()).then(films => {
+            // use films data
+        })
+    </pre>
+    <p>Get film with programid 123:</p>
+    <pre>
+        fetch('/collection/films/123').then(res => res.json()).then(film => {
+            // use film data
+        })
+    </pre>
+    <p>Create a new film:</p>
+    <pre>
+        fetch('/collection/films', {method: 'POST', body: JSON.stringify({title: 'New Movie',movieyear: 2001, starrating: 4.5})})
+    </pre>
+    <p>Update film with programid 123:</p>
+    <pre>
+        fetch('/collection/films/123', {method: 'PUT', body: JSON.stringify({title: 'Updated Movie', movieyear: 2001, starrating})})
+    </pre>
+    <p>Delete film with programid 123:</p>
+    <pre>
+        fetch('/collection/films/123', {method: 'DELETE'})
+    </pre>
+</body>
+</html>

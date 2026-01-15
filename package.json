@@ -1,0 +1,27 @@
+{
+  "name": "nodejsserver",
+  "version": "1.0.0",
+  "description": "an api for movies",
+  "main": "server.js",
+  "scripts": {
+    "start": "nodemon server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "file-type": "^21.3.0",
+    "helmet": "^8.1.0",
+    "mime-types": "^3.0.2",
+    "mysql": "^2.18.1",
+    "npm": "^11.7.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}
