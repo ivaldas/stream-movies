@@ -36,9 +36,12 @@ export const findMp4FilesInFolder = async (folderPath) => {
 };
 
 const durationCache = new Map();
-setInterval(() => {
-  durationCache.clear();
-}, 60 * 60 * 1000); // clear hourly
+setInterval(
+  () => {
+    durationCache.clear();
+  },
+  60 * 60 * 1000,
+); // clear hourly
 export const getVideoDuration = (video_path) => {
   if (durationCache.has(video_path)) {
     return durationCache.get(video_path);
@@ -83,7 +86,7 @@ export const getFileStats = async (video_path) => {
     return await stat(video_path);
   } catch (err) {
     console.error(
-      `File access or stat failed for ${video_path}: ${err.message}`
+      `File access or stat failed for ${video_path}: ${err.message}`,
     );
     throw err;
   }
