@@ -29,7 +29,7 @@ const streamFilmByteRange = async (
   res,
   videoPath,
   baseDir,
-  fileHandle
+  fileHandle,
 ) => {
   let file;
   let ownFileHandle = false;

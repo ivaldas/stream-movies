@@ -36,7 +36,7 @@ const validateVideoMime = (ext, detected) => {
       throw new Error(
         `MIME mismatch: expected ${EXT_MIME_MAP[ext].join(", ")}, got ${
           detected.mime
-        }`
+        }`,
       );
     }
 
@@ -50,7 +50,7 @@ const validateVideoMime = (ext, detected) => {
       throw new Error("MIME mismatch for legacy format");
     } else if (!detected) {
       console.warn(
-        `Warning: Unable to verify legacy format ${ext}. Proceeding with caution.`
+        `Warning: Unable to verify legacy format ${ext}. Proceeding with caution.`,
       );
     }
     return;
@@ -66,7 +66,7 @@ const resolveVideoPath = async (
   fileName,
   baseDir,
   allowedExts = Object.keys(EXT_MIME_MAP),
-  paranoid = true
+  paranoid = true,
 ) => {
   // --- Basic input validation ---
   if (!fileName || typeof fileName !== "string")

@@ -184,7 +184,7 @@ const streamFilmWithFFmpeg = async (req, res, videoInput) => {
 
     // FFmpeg error handling
     ffmpeg.stderr.on("data", (data) =>
-      console.error(`FFmpeg stderr: ${data.toString()}`)
+      console.error(`FFmpeg stderr: ${data.toString()}`),
     );
 
     const cleanup = () => {
