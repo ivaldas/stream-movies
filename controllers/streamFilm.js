@@ -84,11 +84,7 @@ const streamFilm = async (req, res) => {
         folderPath,
         [".mkv"],
       );
-      try {
-        return streamFilmWithFFmpeg(req, res, safeMkvPath);
-      } finally {
-        await mkvFileHandle.close();
-      }
+      return streamFilmWithFFmpeg(req, res, safeMkvPath, mkvFileHandle);
     } else {
       return res.status(415).send("Unsupported media type");
     }

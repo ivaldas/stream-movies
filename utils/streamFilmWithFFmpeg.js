@@ -3,16 +3,13 @@ import { spawn } from "node:child_process";
 import { getVideoDuration, getFileStats } from "./streamVideoFn.js";
 
 /**
- * Stream MKV (or other formats) as MP4 using FFmpeg
- * Supports optional FileHandle for race-safe streaming
- *
- * @param {import('http').IncomingMessage} req
- * @param {import('http').ServerResponse} res
- * @param {string|import('fs').FileHandle} videoInput Absolute path or fs.FileHandle
+ * @param {string} videoPath (optional, fallback)
+ * @param {import('fs').FileHandle} fileHandle REQUIRED for FD mode
  */
 
 // FFmpeg-based conversion from MKV to MP4 (supports partial range)
-const streamFilmWithFFmpeg = async (req, res, videoInput) => {
+const streamFilmWithFFmpeg = async (req, res, videoInput, fileHandle) => {
+  const useFd = process.platform !== "win32" && fileHandle?.fd != null;
   let videoPath;
   if (typeof videoInput === "string") {
     videoPath = videoInput;
@@ -69,6 +66,9 @@ const streamFilmWithFFmpeg = async (req, res, videoInput) => {
       "Transfer-Encoding": "chunked",
     });
 
+    const fd = fileHandle.fd;
+    const inputArg = useFd ? `pipe:${fd}` : videoPath;
+
     const ffmpegArgs = [
       "-hide_banner",
       "-analyzeduration",
@@ -83,7 +83,8 @@ const streamFilmWithFFmpeg = async (req, res, videoInput) => {
       // '-ss', startTime.toString(),
       ...(startTime > 0 ? ["-ss", startTime.toFixed(3)] : []),
       "-i",
-      videoPath, // Input file
+      inputArg,
+      // videoPath, // Input file
       // '-noaccurate_seek',
       // '-copyts',
       // '-avoid_negative_ts', 'make_zero',
@@ -178,8 +179,14 @@ const streamFilmWithFFmpeg = async (req, res, videoInput) => {
     ];
 
     const ffmpeg = spawn("ffmpeg", ffmpegArgs, {
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: useFd
+        ? ["ignore", "pipe", "pipe", fd]
+        : ["ignore", "pipe", "pipe"],
     });
+    // IMPORTANT: close unused FileHandle immediately
+    if (!useFd && fileHandle) {
+      await fileHandle.close();
+    }
     ffmpeg.stdout.pipe(res); // Pipe the FFmpeg output to the response
 
     // FFmpeg error handling
@@ -187,21 +194,35 @@ const streamFilmWithFFmpeg = async (req, res, videoInput) => {
       console.error(`FFmpeg stderr: ${data.toString()}`),
     );
 
-    const cleanup = () => {
+    let fileClosed = false;
+    const closeFile = async () => {
+      if (fileClosed) return;
+      fileClosed = true;
+      try {
+        await fileHandle.close();
+      } catch (e) {
+        // ignore double-close or race errors
+      }
+    };
+
+    const cleanup = async () => {
       if (!ffmpeg.killed) ffmpeg.kill("SIGKILL");
+      await closeFile();
     };
 
     // Client disconnected
     req.on("close", cleanup);
     res.on("close", cleanup);
 
-    ffmpeg.on("error", (err) => {
+    ffmpeg.on("error", async (err) => {
       console.error("FFmpeg spawn error:", err);
+      await closeFile();
       if (!res.headersSent) res.writeHead(500);
       res.end("Internal Server Error");
     });
 
-    ffmpeg.on("exit", (code, signal) => {
+    ffmpeg.on("exit", async (code, signal) => {
+      await closeFile();
       if (code !== 0)
         console.error(`FFmpeg exited with code ${code}, signal ${signal}`);
       if (!res.writableEnded) res.end();
