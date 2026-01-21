@@ -220,12 +220,25 @@ const streamFilmByteRange = async (
 
 // Cleanup helper for stream + file handles
 const attachCleanup = (stream, res, fileHandle, ownFileHandle) => {
+  let cleaned = false;
   const cleanup = async () => {
+    if (cleaned) return;
+    cleaned = true;
+
     if (stream) stream.destroy();
-    await safeClose(fileHandle, ownFileHandle);
+    try {
+      stream.destroy();
+    } catch {}
+
+    if (fileHandle) {
+      try {
+        await fileHandle.close();
+      } catch {}
+    }
   };
 
   res.on("close", cleanup);
+  res.on("finish", cleanup); // also cover normal end
   stream.on("end", cleanup);
   stream.on("error", cleanup);
 };
