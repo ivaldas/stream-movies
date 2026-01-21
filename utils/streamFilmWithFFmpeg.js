@@ -9,7 +9,10 @@ import { getVideoDuration, getFileStats } from "./streamVideoFn.js";
 
 // FFmpeg-based conversion from MKV to MP4 (supports partial range)
 const streamFilmWithFFmpeg = async (req, res, videoInput, fileHandle) => {
-  const useFd = process.platform !== "win32" && fileHandle?.fd != null;
+  const canUseFdInput = (fh) =>
+    process.platform !== "win32" && typeof fh?.fd === "number";
+  const useFd = canUseFdInput(fileHandle);
+
   let videoPath;
   if (typeof videoInput === "string") {
     videoPath = videoInput;
