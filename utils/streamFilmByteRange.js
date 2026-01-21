@@ -5,13 +5,13 @@ import mime from "mime-types";
 import { getFileStats } from "./streamVideoFn.js";
 
 /**
- * Stream a video file supporting byte-range requests.
+ * Stream a video file with byte-range support.
  *
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
  * @param {string} videoPath Absolute file path
- * @param {string} baseDir Base directory for extra security
- * @param {import('fs').FileHandle} [fileHandle] Optional open file handle from resolveVideoPath
+ * @param {string} baseDir Base directory for security checks
+ * @param {import('fs').FileHandle} [fileHandle] Optional FileHandle from resolveVideoPath
  */
 
 // // MIME types
@@ -33,6 +33,7 @@ const streamFilmByteRange = async (
 ) => {
   let file;
   let ownFileHandle = false;
+  let stream;
 
   try {
     // Use provided file handle or open the file ourselves
@@ -86,21 +87,13 @@ const streamFilmByteRange = async (
         ...commonHeader,
         "Content-Length": fileSize,
       });
-      const stream = fileHandle
+      stream = fileHandle
         ? file.createReadStream({ highWaterMark: 32 * 1024 * 1024 })
         : createReadStream(safePath, {
             highWaterMark: 32 * 1024 * 1024,
           }); // 32MB buffer
       stream.pipe(res);
-      stream.on("error", (err) => {
-        console.error("Stream error:", err);
-        res.writeHead(500);
-        res.end("Internal Server Error");
-      });
-      res.on("close", async () => {
-        stream.destroy();
-        if (ownFileHandle) await file.close();
-      });
+      attachCleanup(stream, res, fileHandle, ownFileHandle);
       return;
     }
 
@@ -136,7 +129,7 @@ const streamFilmByteRange = async (
       })
       .filter(Boolean);
 
-    if (ranges.length === 0) {
+    if (!ranges.length) {
       res.writeHead(416, { "Content-Range": `bytes */${fileSize}` });
       return res.end("Range Not Satisfiable");
     }
@@ -152,7 +145,7 @@ const streamFilmByteRange = async (
         "Content-Length": chunkSize,
       });
 
-      const stream = fileHandle
+      stream = fileHandle
         ? file.createReadStream({
             start,
             end,
@@ -165,16 +158,7 @@ const streamFilmByteRange = async (
           });
 
       stream.pipe(res);
-      stream.on("error", (err) => {
-        console.error("Stream error:", err);
-        res.writeHead(500);
-        res.end("Internal Server Error");
-      });
-
-      res.on("close", async () => {
-        stream.destroy();
-        if (ownFileHandle) await file.close();
-      });
+      attachCleanup(stream, res, fileHandle, ownFileHandle);
       return;
     }
 
@@ -189,7 +173,7 @@ const streamFilmByteRange = async (
     const pipeRange = async (i) => {
       if (i >= ranges.length) {
         res.end(`--${boundary}--`);
-        if (ownFileHandle) await file.close();
+        await safeClose(fileHandle, ownFileHandle);
         return;
       }
 
@@ -198,7 +182,7 @@ const streamFilmByteRange = async (
       res.write(`Content-Type: ${contentType}\r\n`);
       res.write(`Content-Range: bytes ${start}-${end}/${fileSize}\r\n\r\n`);
 
-      const stream = fileHandle
+      stream = fileHandle
         ? file.createReadStream({
             start,
             end,
@@ -216,9 +200,10 @@ const streamFilmByteRange = async (
         pipeRange(i + 1);
       });
 
-      stream.on("error", (err) => {
+      stream.on("error", async (err) => {
         console.error("Stream error:", err);
         res.end();
+        await safeClose(fileHandle, ownFileHandle);
       });
 
       res.on("close", () => stream.destroy());
@@ -229,7 +214,31 @@ const streamFilmByteRange = async (
     console.error("File streaming error:", err);
     res.writeHead(500);
     res.end("Internal Server Error");
-    if (ownFileHandle && file) await file.close();
+    await safeClose(fileHandle, ownFileHandle);
+  }
+};
+
+// Cleanup helper for stream + file handles
+const attachCleanup = (stream, res, fileHandle, ownFileHandle) => {
+  const cleanup = async () => {
+    if (stream) stream.destroy();
+    await safeClose(fileHandle, ownFileHandle);
+  };
+
+  res.on("close", cleanup);
+  stream.on("end", cleanup);
+  stream.on("error", cleanup);
+};
+
+// Close file handles safely
+const safeClose = async (fileHandle, ownFileHandle) => {
+  if (!fileHandle) return;
+  try {
+    if (ownFileHandle || fileHandle) {
+      await fileHandle.close();
+    }
+  } catch (err) {
+    console.error("Error closing file handle:", err);
   }
 };
 
