@@ -3,42 +3,45 @@ import { spawn } from "node:child_process";
 import { getVideoDuration, getFileStats } from "./streamVideoFn.js";
 
 /**
- * @param {string} videoPath (optional, fallback)
- * @param {import('fs').FileHandle} fileHandle REQUIRED for FD mode
+ * FFmpeg-based streaming with cross-platform FileHandle support
+ *
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {string | { path: string, fd?: number }} videoInput Path string or FileHandle object
+ * @param {import('fs').FileHandle} [fileHandle] Optional Node FileHandle
  */
 
 // FFmpeg-based conversion from MKV to MP4 (supports partial range)
 const streamFilmWithFFmpeg = async (req, res, videoInput, fileHandle) => {
-  const canUseFdInput = (fh) =>
-    process.platform !== "win32" && typeof fh?.fd === "number";
-  const useFd = canUseFdInput(fileHandle);
+  const isWindows = process.platform === "win32";
 
-  let videoPath;
-  if (typeof videoInput === "string") {
-    videoPath = videoInput;
-  } else if (videoInput?.path) {
-    videoPath = videoInput.path; // FileHandle
-  } else {
-    throw new Error("Invalid videoInput: must be path or FileHandle");
-  }
+  // Determine FFmpeg input
+  const fdInput = !isWindows && fileHandle?.fd !== undefined;
+  const inputArg = fdInput
+    ? `pipe:${fileHandle.fd}`
+    : typeof videoInput === "string"
+      ? videoInput
+      : videoInput.path;
 
   try {
     // Get file stats (works with path or FileHandle)
-    const stats = videoInput?.stat
-      ? await videoInput.stat()
-      : await getFileStats(videoPath);
+    const stats = fileHandle?.stat
+      ? await fileHandle.stat()
+      : await getFileStats(inputArg);
     const fileSize = stats.size;
     const contentType = "video/mp4";
 
     // Get video duration in seconds
-    const duration = await getVideoDuration(videoPath);
+    const duration = await getVideoDuration(
+      typeof videoInput === "string" ? videoInput : videoInput.path,
+    );
 
     // Approximate startTime from byte-range (if provided)
     let startTime = 0;
     const range = req.headers.range;
 
     // Convert byte range → time offset
-    if (range) {
+    if (range && duration > 0) {
       const [startStr] = range.replace(/bytes=/, "").split("-");
       const byteStart = Number(startStr);
 
@@ -68,9 +71,6 @@ const streamFilmWithFFmpeg = async (req, res, videoInput, fileHandle) => {
       // 'Cache-Control': 'no-cache',
       "Transfer-Encoding": "chunked",
     });
-
-    const fd = fileHandle.fd;
-    const inputArg = useFd ? `pipe:${fd}` : videoPath;
 
     const ffmpegArgs = [
       "-hide_banner",
@@ -182,12 +182,12 @@ const streamFilmWithFFmpeg = async (req, res, videoInput, fileHandle) => {
     ];
 
     const ffmpeg = spawn("ffmpeg", ffmpegArgs, {
-      stdio: useFd
-        ? ["ignore", "pipe", "pipe", fd]
+      stdio: fdInput
+        ? ["ignore", "pipe", "pipe", fileHandle.fd]
         : ["ignore", "pipe", "pipe"],
     });
     // IMPORTANT: close unused FileHandle immediately
-    if (!useFd && fileHandle) {
+    if (!fdInput && fileHandle) {
       await fileHandle.close();
     }
     ffmpeg.stdout.pipe(res); // Pipe the FFmpeg output to the response
@@ -199,8 +199,14 @@ const streamFilmWithFFmpeg = async (req, res, videoInput, fileHandle) => {
 
     let fileClosed = false;
     const closeFile = async () => {
-      if (fileClosed) return;
-      fileClosed = true;
+      if (!fileClosed) {
+        fileClosed = true;
+        if (fdInput && fileHandle) {
+          try {
+            await fileHandle.close();
+          } catch {} // ignore errors
+        }
+      }
       try {
         await fileHandle.close();
       } catch (e) {
@@ -219,13 +225,13 @@ const streamFilmWithFFmpeg = async (req, res, videoInput, fileHandle) => {
 
     ffmpeg.on("error", async (err) => {
       console.error("FFmpeg spawn error:", err);
-      await closeFile();
+      await cleanup();
       if (!res.headersSent) res.writeHead(500);
       res.end("Internal Server Error");
     });
 
     ffmpeg.on("exit", async (code, signal) => {
-      await closeFile();
+      await cleanup();
       if (code !== 0)
         console.error(`FFmpeg exited with code ${code}, signal ${signal}`);
       if (!res.writableEnded) res.end();
