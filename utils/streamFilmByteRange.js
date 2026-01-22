@@ -93,7 +93,7 @@ const streamFilmByteRange = async (
             highWaterMark: 32 * 1024 * 1024,
           }); // 32MB buffer
       stream.pipe(res);
-      attachCleanup(stream, res, fileHandle, ownFileHandle);
+      attachCleanup(stream, res, fileHandle, ownFileHandle); // Attach cleanup after streaming begins
       return;
     }
 
@@ -195,6 +195,7 @@ const streamFilmByteRange = async (
           });
 
       stream.pipe(res, { end: false });
+      attachCleanup(stream, res, fileHandle, ownFileHandle);
       stream.on("end", () => {
         res.write("\r\n");
         pipeRange(i + 1);
@@ -225,30 +226,52 @@ const attachCleanup = (stream, res, fileHandle, ownFileHandle) => {
     if (cleaned) return;
     cleaned = true;
 
-    if (stream) stream.destroy();
-    try {
-      stream.destroy();
-    } catch {}
+    // Close the stream and handle errors
+    if (stream) {
+      try {
+        stream.destroy();
+      } catch (err) {
+        console.error("Error destroying stream:", err);
+      }
+    }
 
+    // Explicitly close the file handle
     if (fileHandle) {
       try {
-        await fileHandle.close();
-      } catch {}
+        await fileHandle.close(); // Explicitly close file handle to avoid GC closure warning
+      } catch (err) {
+        console.error("Error closing file handle:", err);
+      }
     }
   };
 
+  // Attach cleanup to events
   res.on("close", cleanup);
+  res.on("close", safeClose);
   res.on("finish", cleanup); // also cover normal end
+  res.on("finish", safeClose);
   stream.on("end", cleanup);
+  stream.on("end", safeClose);
   stream.on("error", cleanup);
+  stream.on("error", safeClose);
+
+  // Ensure cleanup if the response is closed or stream finishes early
+  res.on("close", () => {
+    if (stream) stream.destroy();
+  });
+  stream.on("end", cleanup);
+  stream.on("end", safeClose);
+  stream.on("error", cleanup);
+  stream.on("error", safeClose);
 };
 
-// Close file handles safely
+// Close file handles safely and explicitly
 const safeClose = async (fileHandle, ownFileHandle) => {
   if (!fileHandle) return;
   try {
+    // Ensure file handle is closed explicitly
     if (ownFileHandle || fileHandle) {
-      await fileHandle.close();
+      await fileHandle.close(); // Explicit closure of the file handle
     }
   } catch (err) {
     console.error("Error closing file handle:", err);
