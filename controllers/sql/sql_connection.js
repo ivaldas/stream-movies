@@ -20,6 +20,22 @@ export const db = mysql.createPool({
   connectionLimit: 10,
 });
 
+// To log the connection ID when a connection is successfully established
+const testConnection = async () => {
+  try {
+    const connection = await db.getConnection(); // Get a connection from the pool
+    console.log(
+      `Connection established with XAMPP MySQL, Connection ID: ${connection.threadId}`,
+    );
+    connection.release(); // Release the connection back to the pool
+  } catch (err) {
+    console.error("Error connecting to the database: " + err.message);
+  }
+};
+
+// Test the connection
+testConnection();
+
 export const createdb = async (req, res) => {
   try {
     await rootPool.query("CREATE DATABASE IF NOT EXISTS movies_api");
@@ -29,28 +45,5 @@ export const createdb = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-
-// export const db = mysql.createConnection({
-//   host: "localhost",
-//   user: process.env.XAMPP_USER,
-//   password: process.env.XAMPP_PSW,
-//   database: "movies_api",
-// });
-// db.connect((err) => {
-//   if (err) {
-//     console.error("Error connecting: " + err.stack);
-//     return;
-//   }
-//   console.log(`Connection with xampp mysql established as id ${db.threadId}`);
-// });
-
-// export const createdb = async (req, res) => {
-//   let sql = "CREATE DATABASE movies_api";
-//   db.query(sql, (err, result) => {
-//     if (err) throw err;
-//     console.log(result);
-//     res.send("Database created.");
-//   });
-// };
 
 export default db;
