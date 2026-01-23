@@ -83,6 +83,9 @@ const streamFilmByteRange = async (
     const rangeHeader = req.headers.range;
     // If no range header, send the full file
     if (!rangeHeader) {
+      // console.log(
+      //   `Range header: undefined - Streaming full file: ${videoPath}`,
+      // );
       res.writeHead(200, {
         ...commonHeader,
         "Content-Length": fileSize,
@@ -96,6 +99,7 @@ const streamFilmByteRange = async (
       attachCleanup(stream, res, fileHandle, ownFileHandle); // Attach cleanup after streaming begins
       return;
     }
+    // console.log(`Range header: ${rangeHeader} - Streaming MP4: ${videoPath}`);
 
     // Handle multiple ranges
     const ranges = rangeHeader
@@ -115,8 +119,14 @@ const streamFilmByteRange = async (
           end = endStr ? Number(endStr) : fileSize - 1;
         }
 
+        // Adjust range end if it exceeds the file size
+        if (end > fileSize - 1) {
+          end = fileSize - 1;
+        }
+
         if (
           isNaN(start) ||
+          isNaN(end) ||
           start < 0 ||
           start >= fileSize ||
           end >= fileSize ||
