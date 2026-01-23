@@ -195,7 +195,6 @@ const streamFilmByteRange = async (
           });
 
       stream.pipe(res, { end: false });
-      attachCleanup(stream, res, fileHandle, ownFileHandle);
       stream.on("end", () => {
         res.write("\r\n");
         pipeRange(i + 1);
@@ -236,7 +235,7 @@ const attachCleanup = (stream, res, fileHandle, ownFileHandle) => {
     }
 
     // Explicitly close the file handle
-    if (fileHandle) {
+    if (fileHandle && ownFileHandle) {
       try {
         await fileHandle.close(); // Explicitly close file handle to avoid GC closure warning
       } catch (err) {
@@ -247,22 +246,16 @@ const attachCleanup = (stream, res, fileHandle, ownFileHandle) => {
 
   // Attach cleanup to events
   res.on("close", cleanup);
-  res.on("close", safeClose);
   res.on("finish", cleanup); // also cover normal end
-  res.on("finish", safeClose);
   stream.on("end", cleanup);
-  stream.on("end", safeClose);
   stream.on("error", cleanup);
-  stream.on("error", safeClose);
 
   // Ensure cleanup if the response is closed or stream finishes early
   res.on("close", () => {
     if (stream) stream.destroy();
   });
   stream.on("end", cleanup);
-  stream.on("end", safeClose);
   stream.on("error", cleanup);
-  stream.on("error", safeClose);
 };
 
 // Close file handles safely and explicitly
