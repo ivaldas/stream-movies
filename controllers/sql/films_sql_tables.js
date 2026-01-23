@@ -1,184 +1,116 @@
 import db from "./sql_connection.js";
 
-// Utility to execute queries with promise
-const executeQuery = async (sql) => {
+export const createAllTables = async (req, res) => {
   try {
-    const [result] = await db.promise().query(sql);
-    return result;
-  } catch (err) {
-    throw new Error(err.message);
-  }
-};
+    const tables = [
+      /* ======================
+         FILMS
+      ====================== */
+      `CREATE TABLE IF NOT EXISTS films (
+        film_id INT AUTO_INCREMENT PRIMARY KEY,
+        file_path VARCHAR(255) NOT NULL,
+        full_path VARCHAR(255),
+        movieyear SMALLINT,
+        title VARCHAR(100),
+        description TEXT,
+        isepisode TINYINT(1) DEFAULT 0,
+        isepisodic TINYINT(1) DEFAULT 0,
+        seriesid VARCHAR(30),
+        programid VARCHAR(30),
+        starrating FLOAT,
+        mpaarating VARCHAR(5),
+        image VARCHAR(255),
+        UNIQUE KEY uq_film_title_year (title, movieyear),
+        INDEX idx_films_title (title),
+        INDEX idx_films_year (movieyear)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
-// Create films table
-export const createfilmstable = async (req, res) => {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS films (
-      film_id INT AUTO_INCREMENT,
-      file_path VARCHAR(255) NOT NULL,
-      full_path VARCHAR(255),
-      movieyear SMALLINT,
-      title VARCHAR(100),
-      description TEXT,
-      isepisode VARCHAR(5),
-      isepisodic VARCHAR(5),
-      seriesid VARCHAR(30),
-      programid VARCHAR(30),
-      starrating FLOAT,
-      mpaarating VARCHAR(5),
-      image VARCHAR(255),
-      PRIMARY KEY(film_id)
-    )
-  `;
-  try {
-    await executeQuery(sql);
-    res.send("Films table created successfully");
-  } catch (err) {
-    res.status(500).send(`Error creating films table: ${err.message}`);
-  }
-};
+      /* ======================
+         PEOPLE TABLES
+      ====================== */
+      `CREATE TABLE IF NOT EXISTS actors (
+        actor_id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        UNIQUE KEY uq_actor_name (name),
+        INDEX idx_actor_name (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
-// Create actors table
-export const createactorstable = async (req, res) => {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS actors (
-      actor_id INT AUTO_INCREMENT,
-      name VARCHAR(30) NOT NULL,
-      PRIMARY KEY(actor_id)
-    )
-  `;
-  try {
-    await executeQuery(sql);
-    res.send("Actors table created successfully");
-  } catch (err) {
-    res.status(500).send(`Error creating actors table: ${err.message}`);
-  }
-};
+      `CREATE TABLE IF NOT EXISTS directors (
+        director_id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        UNIQUE KEY uq_director_name (name),
+        INDEX idx_director_name (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
-// Create directors table
-export const createdirectorstable = async (req, res) => {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS directors (
-      director_id INT AUTO_INCREMENT,
-      name VARCHAR(30) NOT NULL,
-      PRIMARY KEY(director_id)
-    )
-  `;
-  try {
-    await executeQuery(sql);
-    res.send("Directors table created successfully");
-  } catch (err) {
-    res.status(500).send(`Error creating directors table: ${err.message}`);
-  }
-};
+      `CREATE TABLE IF NOT EXISTS writers (
+        writer_id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        UNIQUE KEY uq_writer_name (name),
+        INDEX idx_writer_name (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
-// Create writers table
-export const createwriterstable = async (req, res) => {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS writers (
-      writer_id INT AUTO_INCREMENT,
-      name VARCHAR(30) NOT NULL,
-      PRIMARY KEY(writer_id)
-    )
-  `;
-  try {
-    await executeQuery(sql);
-    res.send("Writers table created successfully");
-  } catch (err) {
-    res.status(500).send(`Error creating writers table: ${err.message}`);
-  }
-};
+      /* ======================
+         GENRES
+      ====================== */
+      `CREATE TABLE IF NOT EXISTS genres (
+        genre_id INT AUTO_INCREMENT PRIMARY KEY,
+        genre_name VARCHAR(50) NOT NULL,
+        UNIQUE KEY uq_genre_name (genre_name),
+        INDEX idx_genre_name (genre_name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
-// Create genres table
-export const creategenrestable = async (req, res) => {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS genres (
-      genre_id INT AUTO_INCREMENT,
-      genre_name VARCHAR(30) NOT NULL,
-      PRIMARY KEY(genre_id)
-    )
-  `;
-  try {
-    await executeQuery(sql);
-    res.send("Genres table created successfully");
-  } catch (err) {
-    res.status(500).send(`Error creating genres table: ${err.message}`);
-  }
-};
+      /* ======================
+         JUNCTION TABLES
+      ====================== */
+      `CREATE TABLE IF NOT EXISTS filmactors (
+        film_id INT NOT NULL,
+        actor_id INT NOT NULL,
+        PRIMARY KEY (film_id, actor_id),
+        INDEX idx_fa_actor (actor_id),
+        FOREIGN KEY (film_id) REFERENCES films(film_id) ON DELETE CASCADE ON UPDATE CASCADE,
+        FOREIGN KEY (actor_id) REFERENCES actors(actor_id) ON DELETE CASCADE ON UPDATE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
-// Create film-actors junction table
-export const createfilmactors = async (req, res) => {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS filmactors (
-      film_id INT,
-      actor_id INT,
-      PRIMARY KEY(film_id, actor_id),
-      FOREIGN KEY(film_id) REFERENCES films(film_id),
-      FOREIGN KEY(actor_id) REFERENCES actors(actor_id)
-    )
-  `;
-  try {
-    await executeQuery(sql);
-    res.send("Film-actors table created successfully");
-  } catch (err) {
-    res.status(500).send(`Error creating film-actors table: ${err.message}`);
-  }
-};
+      `CREATE TABLE IF NOT EXISTS filmdirectors (
+        film_id INT NOT NULL,
+        director_id INT NOT NULL,
+        PRIMARY KEY (film_id, director_id),
+        INDEX idx_fd_director (director_id),
+        FOREIGN KEY (film_id) REFERENCES films(film_id) ON DELETE CASCADE ON UPDATE CASCADE,
+        FOREIGN KEY (director_id) REFERENCES directors(director_id) ON DELETE CASCADE ON UPDATE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
-// Create film-directors junction table
-export const createfilmdirectors = async (req, res) => {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS filmdirectors (
-      film_id INT,
-      director_id INT,
-      PRIMARY KEY(film_id, director_id),
-      FOREIGN KEY(film_id) REFERENCES films(film_id),
-      FOREIGN KEY(director_id) REFERENCES directors(director_id)
-    )
-  `;
-  try {
-    await executeQuery(sql);
-    res.send("Film-directors table created successfully");
-  } catch (err) {
-    res.status(500).send(`Error creating film-directors table: ${err.message}`);
-  }
-};
+      `CREATE TABLE IF NOT EXISTS filmwriters (
+        film_id INT NOT NULL,
+        writer_id INT NOT NULL,
+        PRIMARY KEY (film_id, writer_id),
+        INDEX idx_fw_writer (writer_id),
+        FOREIGN KEY (film_id) REFERENCES films(film_id) ON DELETE CASCADE ON UPDATE CASCADE,
+        FOREIGN KEY (writer_id) REFERENCES writers(writer_id) ON DELETE CASCADE ON UPDATE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
-// Create film-writers junction table
-export const createfilmwriters = async (req, res) => {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS filmwriters (
-      film_id INT,
-      writer_id INT,
-      PRIMARY KEY(film_id, writer_id),
-      FOREIGN KEY(film_id) REFERENCES films(film_id),
-      FOREIGN KEY(writer_id) REFERENCES writers(writer_id)
-    )
-  `;
-  try {
-    await executeQuery(sql);
-    res.send("Film-writers table created successfully");
-  } catch (err) {
-    res.status(500).send(`Error creating film-writers table: ${err.message}`);
-  }
-};
+      `CREATE TABLE IF NOT EXISTS filmgenres (
+        film_id INT NOT NULL,
+        genre_id INT NOT NULL,
+        PRIMARY KEY (film_id, genre_id),
+        INDEX idx_fg_genre (genre_id),
+        FOREIGN KEY (film_id) REFERENCES films(film_id) ON DELETE CASCADE ON UPDATE CASCADE,
+        FOREIGN KEY (genre_id) REFERENCES genres(genre_id) ON DELETE CASCADE ON UPDATE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+    ];
 
-// Create film-genres junction table
-export const createfilmgenres = async (req, res) => {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS filmgenres (
-      film_id INT,
-      genre_id INT,
-      PRIMARY KEY(film_id, genre_id),
-      FOREIGN KEY(film_id) REFERENCES films(film_id),
-      FOREIGN KEY(genre_id) REFERENCES genres(genre_id)
-    )
-  `;
-  try {
-    await executeQuery(sql);
-    res.send("Film-genres table created successfully");
+    for (const sql of tables) {
+      await db.query(sql);
+    }
+
+    res
+      .status(201)
+      .send(
+        " All tables created successfully with proper indexes and constraints.",
+      );
   } catch (err) {
-    res.status(500).send(`Error creating film-genres table: ${err.message}`);
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 };
 
