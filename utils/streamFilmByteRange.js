@@ -238,7 +238,7 @@ const attachCleanup = (stream, res, fileHandle, ownFileHandle) => {
     // Close the stream and handle errors
     if (stream) {
       try {
-        stream.destroy();
+        stream.destroy(); // Destroy the stream to free up resources
       } catch (err) {
         console.error("Error destroying stream:", err);
       }
@@ -247,18 +247,25 @@ const attachCleanup = (stream, res, fileHandle, ownFileHandle) => {
     // Explicitly close the file handle
     if (fileHandle && ownFileHandle) {
       try {
+        console.log("Closing file handle explicitly");
         await fileHandle.close(); // Explicitly close file handle to avoid GC closure warning
       } catch (err) {
         console.error("Error closing file handle:", err);
       }
     }
+
+    // Log when the streaming process finishes
+    console.error("Video streaming finished or stopped.");
   };
 
   // Attach cleanup to events
   res.on("close", cleanup);
   res.on("finish", cleanup); // also cover normal end
   stream.on("end", cleanup);
-  stream.on("error", cleanup);
+  stream.on("error", async (err) => {
+    console.error("Stream error:", err); // Log any stream errors
+    await cleanup(); // Ensure cleanup happens after error
+  });
 
   // Ensure cleanup if the response is closed or stream finishes early
   res.on("close", () => {
