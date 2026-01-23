@@ -33,12 +33,12 @@ app.use("/collection", stream);
 // ################ MYSQL ROUTES #####################################
 
 app.use("/", sql);
-app.use("/sql/collection", sql);
+app.use("/collection/sql", sql);
 
 // ####################################################################
 app.use(home);
 
 const port = process.env.PORT || 5001;
 app.listen(port, "0.0.0.0", () =>
-  console.log(`Films API nodejs server listening at http://localhost:${port}`)
+  console.log(`Films API nodejs server listening at http://localhost:${port}`),
 );
