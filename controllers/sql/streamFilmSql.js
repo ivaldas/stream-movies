@@ -91,6 +91,12 @@ const streamFilmSql = async (req, res) => {
         mp4FolderPath,
         [".mp4"],
       );
+      console.log(
+        "Range header:",
+        req.headers.range,
+        "Streaming MP4:",
+        safeMp4Path,
+      );
       return streamFilmByteRange(
         req,
         res,
