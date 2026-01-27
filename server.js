@@ -1,16 +1,20 @@
 // import "dotenv/config";
 // import fs from "node:fs/promises";
 import path from "node:path";
+import { createWriteStream } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
+import morgan from "morgan";
 
 import home from "./routes/home.js";
 import films from "./routes/filmsRoutes.js";
 import stream from "./routes/streamRoutes.js";
 import sql from "./routes/films_sql_routes.js";
+import lrtRoutes from "./routes/lrtRoutes.js";
 
 const app = express();
 
@@ -18,11 +22,22 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-app.use(express.static(path.join(__dirname, "public")));
+const __dirname = dirname(__filename);
+app.use(express.static(join(__dirname, "public")));
+
+// Set up access log file stream
+const accessLogStream = createWriteStream(join(__dirname, "access.log"), {
+  flags: "a",
+});
+
 app.use(cors());
 app.use(helmet());
 app.use(compression());
+app.use(morgan("combined", { stream: accessLogStream }));
+
+// ################ LIVE ROUTES ######################################
+
+app.use("/live", lrtRoutes);
 
 // ################ API ROUTES #######################################
 
