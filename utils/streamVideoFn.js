@@ -1,7 +1,6 @@
-import { readdir } from "node:fs/promises";
 import { extname } from "node:path";
 import { spawn } from "node:child_process";
-import { stat, access, constants } from "node:fs/promises";
+import { stat, access, constants, readdir } from "node:fs/promises";
 
 // async function getMediaDuration(filePath) {
 //   return new Promise((resolve, reject) => {
@@ -90,4 +89,65 @@ export const getFileStats = async (video_path) => {
     );
     throw err;
   }
+};
+
+// Logs streaming metrics, aborts, seeks, and errors
+export const observeStream = ({ req, res, stream, filePath, start, end }) => {
+  const reqId = req.requestId || req.headers["x-request-id"];
+
+  const startedAt = process.hrtime.bigint();
+  let bytesSent = 0;
+  let finished = false;
+
+  const expectedBytes =
+    typeof start === "number" && typeof end === "number"
+      ? end - start + 1
+      : null;
+
+  stream.on("data", (chunk) => {
+    bytesSent += chunk.length;
+  });
+
+  res.on("finish", () => {
+    finished = true;
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    const kind =
+      expectedBytes && bytesSent < expectedBytes
+        ? "probe"
+        : expectedBytes && bytesSent >= expectedBytes
+          ? "range"
+          : "full";
+    console.log(
+      `📦 [${reqId}] ${kind} delivered | ${bytesSent} bytes | ${durationMs.toFixed(
+        1,
+      )} ms | ${filePath}`,
+    );
+  });
+
+  res.on("close", () => {
+    if (finished) return;
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    const isSeekOrProbe =
+      expectedBytes !== null && bytesSent > 0 && bytesSent < expectedBytes;
+
+    if (isSeekOrProbe) {
+      if (process.env.DEBUG_STREAMS === "true") {
+        console.debug(
+          `↩️ [${reqId}] seek/probe | ${bytesSent}/${expectedBytes} bytes | ${durationMs.toFixed(
+            1,
+          )} ms | ${filePath}`,
+        );
+      }
+    } else {
+      console.warn(
+        `⚠️ [${reqId}] client aborted | ${bytesSent} bytes | ${durationMs.toFixed(
+          1,
+        )} ms | ${filePath}`,
+      );
+    }
+  });
+
+  stream.on("error", (err) => {
+    console.error(`❌ [${reqId}] stream error | ${err.message} | ${filePath}`);
+  });
 };

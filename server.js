@@ -33,6 +33,18 @@ const accessLogStream = createWriteStream(
   },
 );
 
+// 🔹 Request ID middleware (ADD HERE)
+app.use((req, res, next) => {
+  const reqId =
+    req.headers["x-request-id"] ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+  req.requestId = reqId;
+  res.setHeader("X-Request-Id", reqId);
+
+  next();
+});
+
 app.use(cors());
 app.use(helmet());
 app.use(compression());
@@ -50,7 +62,6 @@ app.use("/collection", stream);
 
 // ################ MYSQL ROUTES #####################################
 
-app.use("/", sql);
 app.use("/collection/sql", sql);
 
 // ####################################################################

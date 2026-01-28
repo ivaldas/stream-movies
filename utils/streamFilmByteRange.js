@@ -1,290 +1,57 @@
 import { createReadStream } from "node:fs";
-import path from "node:path";
-import mime from "mime-types";
+import { stat } from "node:fs/promises";
 
-import { getFileStats } from "./streamVideoFn.js";
+import { observeStream } from "./streamVideoFn.js";
 
-/**
- * Stream a video file with byte-range support.
- *
- * @param {import('http').IncomingMessage} req
- * @param {import('http').ServerResponse} res
- * @param {string} videoPath Absolute file path
- * @param {string} baseDir Base directory for security checks
- * @param {import('fs').FileHandle} [fileHandle] Optional FileHandle from resolveVideoPath
- */
-
-// // MIME types
-// const mimeTypes = { '.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.webm': 'video/webm' };
-
-// // Helper function to determine MIME type
-// const getContentType = (videoPath) => {
-//   const fileExtension = extname(videoPath.replace(/\.txt$/, '')).toLowerCase();
-//   return mimeTypes[fileExtension] || 'application/octet-stream';
-// }
-
-// Native MP4 byte-range streaming (Browser-compatible)
-const streamFilmByteRange = async (
-  req,
-  res,
-  videoPath,
-  baseDir,
-  fileHandle,
-) => {
-  let file;
-  let ownFileHandle = false;
-  let stream;
-
+const streamFilmByteRange = async (req, res, filePath) => {
   try {
-    // Use provided file handle or open the file ourselves
-    if (fileHandle) {
-      file = fileHandle;
-    } else {
-      const fsPromises = await import("node:fs/promises");
-      file = await fsPromises.open(videoPath, "r");
-      ownFileHandle = true;
-    }
-
-    // Prevent directory traversal
-    const safeBase = path.resolve(baseDir) + path.sep;
-    const safePath = path.resolve(videoPath);
-    if (!safePath.startsWith(safeBase)) {
-      res.writeHead(403);
-      return res.end("Forbidden");
-    }
-
-    // Get file stats
-    const stats = await getFileStats(safePath);
+    // Get file stats safely
+    const stats = await stat(filePath);
     const fileSize = stats.size;
-    // const contentType = await getContentType(videoPath)
-    const contentType =
-      mime.contentType(safePath) || "application/octet-stream";
 
-    const etag = `"${stats.ino}-${stats.size}-${stats.mtimeMs}"`;
-    const lastModified = stats.mtime.toUTCString();
+    const range = req.headers.range;
 
-    const commonHeader = {
-      "Content-Type": contentType,
-      "Accept-Ranges": "bytes",
-      "Cache-Control": "public, max-age=31536000, immutable", // Cache the video for 1 year
-      "Last-Modified": lastModified,
-      ETag: etag,
-    };
-
-    // Handle HEAD requests (return headers only)
-    if (req.method === "HEAD") {
+    if (!range) {
       res.writeHead(200, {
-        ...commonHeader,
+        "Content-Type": "video/mp4",
         "Content-Length": fileSize,
+        "Accept-Ranges": "bytes",
       });
-      return res.end(); // no body
-    }
-
-    const rangeHeader = req.headers.range;
-    // If no range header, send the full file
-    if (!rangeHeader) {
-      // console.log(
-      //   `Range header: undefined - Streaming full file: ${videoPath}`,
-      // );
-      res.writeHead(200, {
-        ...commonHeader,
-        "Content-Length": fileSize,
-      });
-      stream = fileHandle
-        ? file.createReadStream({ highWaterMark: 32 * 1024 * 1024 })
-        : createReadStream(safePath, {
-            highWaterMark: 32 * 1024 * 1024,
-          }); // 32MB buffer
-      stream.pipe(res);
-      attachCleanup(stream, res, fileHandle, ownFileHandle); // Attach cleanup after streaming begins
+      createReadStream(filePath).pipe(res);
       return;
     }
-    // console.log(`Range header: ${rangeHeader} - Streaming MP4: ${videoPath}`);
 
-    // Handle multiple ranges
-    const ranges = rangeHeader
-      .replace(/bytes=/, "")
-      .split(",")
-      .map((r) => {
-        let [startStr, endStr] = r.split("-");
-        let start, end;
+    const [startStr, endStr] = range.replace(/bytes=/, "").split("-");
+    let start = parseInt(startStr, 10);
+    let end = endStr ? parseInt(endStr, 10) : fileSize - 1;
 
-        if (!startStr) {
-          // Suffix bytes
-          const suffixLength = Number(endStr);
-          start = Math.max(fileSize - suffixLength, 0);
-          end = fileSize - 1;
-        } else {
-          start = Number(startStr);
-          end = endStr ? Number(endStr) : fileSize - 1;
-        }
-
-        // Adjust range end if it exceeds the file size
-        if (end > fileSize - 1) {
-          end = fileSize - 1;
-        }
-
-        if (
-          isNaN(start) ||
-          isNaN(end) ||
-          start < 0 ||
-          start >= fileSize ||
-          end >= fileSize ||
-          end < start
-        ) {
-          return null; // invalid range
-        }
-
-        return { start, end };
-      })
-      .filter(Boolean);
-
-    if (!ranges.length) {
+    if (
+      isNaN(start) ||
+      isNaN(end) ||
+      start > end ||
+      start < 0 ||
+      end >= fileSize
+    ) {
       res.writeHead(416, { "Content-Range": `bytes */${fileSize}` });
       return res.end("Range Not Satisfiable");
     }
 
-    // If only one range, stream normally
-    if (ranges.length === 1) {
-      const { start, end } = ranges[0];
-      const chunkSize = end - start + 1;
+    const chunkSize = end - start + 1;
 
-      res.writeHead(206, {
-        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-        ...commonHeader,
-        "Content-Length": chunkSize,
-      });
-
-      stream = fileHandle
-        ? file.createReadStream({
-            start,
-            end,
-            highWaterMark: 16 * 1024 * 1024,
-          })
-        : createReadStream(safePath, {
-            start,
-            end,
-            highWaterMark: 16 * 1024 * 1024,
-          });
-
-      stream.pipe(res);
-      attachCleanup(stream, res, fileHandle, ownFileHandle);
-      return;
-    }
-
-    // Multiple ranges (multipart/byteranges)
-    const boundary = "MY_VIDEO_BOUNDARY_" + Date.now();
     res.writeHead(206, {
-      "Content-Type": `multipart/byteranges; boundary=${boundary}`,
+      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
       "Accept-Ranges": "bytes",
-      "Cache-Control": "public, max-age=31536000, immutable",
+      "Content-Length": chunkSize,
+      "Content-Type": "video/mp4",
     });
 
-    const pipeRange = async (i) => {
-      if (i >= ranges.length) {
-        res.end(`--${boundary}--`);
-        await safeClose(fileHandle, ownFileHandle);
-        return;
-      }
-
-      const { start, end } = ranges[i];
-      res.write(`--${boundary}\r\n`);
-      res.write(`Content-Type: ${contentType}\r\n`);
-      res.write(`Content-Range: bytes ${start}-${end}/${fileSize}\r\n\r\n`);
-
-      stream = fileHandle
-        ? file.createReadStream({
-            start,
-            end,
-            highWaterMark: 16 * 1024 * 1024,
-          })
-        : createReadStream(safePath, {
-            start,
-            end,
-            highWaterMark: 16 * 1024 * 1024,
-          });
-
-      stream.pipe(res, { end: false });
-      stream.on("end", () => {
-        res.write("\r\n");
-        pipeRange(i + 1);
-      });
-
-      stream.on("error", async (err) => {
-        console.error("Stream error:", err);
-        res.end();
-        await safeClose(fileHandle, ownFileHandle);
-      });
-
-      res.on("close", () => stream.destroy());
-    };
-
-    pipeRange(0);
+    const stream = createReadStream(filePath, { start, end });
+    observeStream({ req, res, stream, filePath, start, end });
+    stream.pipe(res);
   } catch (err) {
-    console.error("File streaming error:", err);
+    console.error("Streaming error:", err);
     res.writeHead(500);
     res.end("Internal Server Error");
-    await safeClose(fileHandle, ownFileHandle);
-  }
-};
-
-// Cleanup helper for stream + file handles
-const attachCleanup = (stream, res, fileHandle, ownFileHandle) => {
-  let cleaned = false;
-  const cleanup = async () => {
-    if (cleaned) return;
-    cleaned = true;
-
-    // Close the stream and handle errors
-    if (stream) {
-      try {
-        stream.destroy(); // Destroy the stream to free up resources
-      } catch (err) {
-        console.error("Error destroying stream:", err);
-      }
-    }
-
-    // Explicitly close the file handle
-    if (fileHandle && ownFileHandle) {
-      try {
-        console.log("Closing file handle explicitly");
-        await fileHandle.close(); // Explicitly close file handle to avoid GC closure warning
-      } catch (err) {
-        console.error("Error closing file handle:", err);
-      }
-    }
-
-    // Log when the streaming process finishes
-    console.error("Video streaming finished or stopped.");
-  };
-
-  // Attach cleanup to events
-  res.on("close", cleanup);
-  res.on("finish", cleanup); // also cover normal end
-  stream.on("end", cleanup);
-  stream.on("error", async (err) => {
-    console.error("Stream error:", err); // Log any stream errors
-    await cleanup(); // Ensure cleanup happens after error
-  });
-
-  // Ensure cleanup if the response is closed or stream finishes early
-  res.on("close", () => {
-    if (stream) stream.destroy();
-  });
-  stream.on("end", cleanup);
-  stream.on("error", cleanup);
-};
-
-// Close file handles safely and explicitly
-const safeClose = async (fileHandle, ownFileHandle) => {
-  if (!fileHandle) return;
-  try {
-    // Ensure file handle is closed explicitly
-    if (ownFileHandle || fileHandle) {
-      await fileHandle.close(); // Explicit closure of the file handle
-    }
-  } catch (err) {
-    console.error("Error closing file handle:", err);
   }
 };
 

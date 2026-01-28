@@ -1,6 +1,11 @@
+import { PassThrough } from "node:stream";
 import { spawn } from "node:child_process";
 
-import { getVideoDuration, getFileStats } from "./streamVideoFn.js";
+import {
+  getVideoDuration,
+  getFileStats,
+  observeStream,
+} from "./streamVideoFn.js";
 
 /**
  * FFmpeg-based streaming with cross-platform FileHandle support
@@ -41,9 +46,11 @@ const streamFilmWithFFmpeg = async (req, res, videoInput, fileHandle) => {
     const range = req.headers.range;
 
     // Convert byte range → time offset
+    let byteStart, byteEnd;
     if (range && duration > 0) {
-      const [startStr] = range.replace(/bytes=/, "").split("-");
-      const byteStart = Number(startStr);
+      const [startStr, endStr] = range.replace(/bytes=/, "").split("-");
+      byteStart = Number(startStr);
+      byteEnd = endStr ? Number(endStr) : fileSize - 1;
 
       if (!isNaN(byteStart) && byteStart > 0 && duration > 0) {
         startTime = (byteStart / fileSize) * duration;
@@ -190,7 +197,18 @@ const streamFilmWithFFmpeg = async (req, res, videoInput, fileHandle) => {
     if (!fdInput && fileHandle) {
       await fileHandle.close();
     }
-    ffmpeg.stdout.pipe(res); // Pipe the FFmpeg output to the response
+
+    const passThrough = new PassThrough();
+    observeStream({
+      req,
+      res,
+      stream: passThrough,
+      filePath: typeof videoInput === "string" ? videoInput : videoInput.path,
+      start: byteStart,
+      end: byteEnd,
+    });
+
+    ffmpeg.stdout.pipe(passThrough).pipe(res); // Pipe the FFmpeg output to the response
 
     // FFmpeg error handling
     ffmpeg.stderr.on("data", (data) =>
