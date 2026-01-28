@@ -2,15 +2,15 @@ import express from "express";
 
 import * as lrtController from "../controllers/LRT/lrt.js";
 
-const app = express();
+// const app = express();
 const router = express.Router();
 
-app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  next();
-});
+// app.use((req, res, next) => {
+//   res.setHeader("Access-Control-Allow-Origin", "*");
+//   res.setHeader("Access-Control-Allow-Methods", "GET");
+//   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+//   next();
+// });
 
 router.get("/lrt", lrtController.getLiveLTV);
 router.get("/plius", lrtController.getLiveLTV2);
