@@ -26,9 +26,12 @@ const __dirname = dirname(__filename);
 app.use(express.static(join(__dirname, "public")));
 
 // Set up access log file stream
-const accessLogStream = createWriteStream(join(__dirname, "access.log"), {
-  flags: "a",
-});
+const accessLogStream = createWriteStream(
+  join(__dirname, "logs", "access.log"),
+  {
+    flags: "a",
+  },
+);
 
 app.use(cors());
 app.use(helmet());
