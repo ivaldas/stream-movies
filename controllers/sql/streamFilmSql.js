@@ -6,6 +6,7 @@ import streamFilmByteRange from "../../utils/streamFilmByteRange.js";
 import streamFilmWithFFmpeg from "../../utils/streamFilmWithFFmpeg.js";
 import resolveVideoPath from "../../utils/resolveVideoPath.js";
 
+// --- Fetch film info ---
 const getFilmByProgramId = async (programid) => {
   const [rows] = await db.execute(
     `
@@ -29,10 +30,10 @@ const getFilmByProgramId = async (programid) => {
     `,
     [programid],
   );
-
   return rows[0] ?? null;
 };
 
+// --- Map DB row to usable object ---
 const mapFilmRow = (film) => ({
   file_path: film.file_path,
   full_path: film.full_path,
@@ -52,24 +53,27 @@ const mapFilmRow = (film) => ({
   image: film.image || "",
 });
 
+// --- Main streaming handler ---
 const streamFilmSql = async (req, res) => {
   try {
     const { id } = req.params;
     const filmRow = await getFilmByProgramId(id);
+
     if (!filmRow) return res.status(404).send("Film not found.");
 
     const foundFilm = mapFilmRow(filmRow);
 
+    // Remove .txt suffix if present
     const originalPath = foundFilm.full_path.replace(/\.txt$/, "");
     const folderPath = dirname(originalPath);
     const baseFileName = basename(originalPath, extname(originalPath));
 
+    // --- Check for MP4 in "Plex Versions/Original Quality" ---
     const mp4FolderPath = resolve(
       folderPath,
       "Plex Versions",
       "Original Quality",
     );
-
     let mp4Files = [];
     try {
       mp4Files = await findMp4FilesInFolder(mp4FolderPath);
@@ -85,42 +89,31 @@ const streamFilmSql = async (req, res) => {
         exact ??
         mp4Files.find((file) => basename(file).startsWith(baseFileName)) ??
         mp4Files[0];
-
-      const { path: safeMp4Path, file: mp4FileHandle } = await resolveVideoPath(
-        selected,
-        mp4FolderPath,
-        [".mp4"],
-      );
+      const safePath = resolve(mp4FolderPath, basename(selected));
       console.log(
         "Range header:",
         req.headers.range,
         "Streaming MP4:",
-        safeMp4Path,
+        safePath,
       );
-      return streamFilmByteRange(
-        req,
-        res,
-        safeMp4Path,
-        mp4FolderPath,
-        mp4FileHandle,
-      );
+      return streamFilmByteRange(req, res, safePath);
     }
 
+    // --- Stream original file if no MP4 folder exists ---
     const fileExtension = extname(originalPath).toLowerCase();
+    const safePath = resolve(folderPath, basename(originalPath));
+
     if (fileExtension === ".mp4" || fileExtension === ".webm") {
-      const { path: safePath, file: fileHandle } = await resolveVideoPath(
-        basename(originalPath),
-        folderPath,
-        [".mp4", ".webm"],
+      console.log(
+        "Range header:",
+        req.headers.range,
+        "Streaming video:",
+        safePath,
       );
-      return streamFilmByteRange(req, res, safePath, folderPath, fileHandle);
+      return streamFilmByteRange(req, res, safePath);
     } else if (fileExtension === ".mkv") {
-      const { path: safeMkvPath, file: mkvFileHandle } = await resolveVideoPath(
-        basename(originalPath),
-        folderPath,
-        [".mkv"],
-      );
-      return streamFilmWithFFmpeg(req, res, safeMkvPath, mkvFileHandle);
+      console.log("Streaming MKV with FFmpeg:", safePath);
+      return streamFilmWithFFmpeg(req, res, safePath);
     } else {
       return res.status(415).send("Unsupported media type");
     }
