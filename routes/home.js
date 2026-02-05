@@ -1,14 +1,42 @@
 import express from "express";
-import path from "node:path";
+import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const app = express();
+const router = express.Router();
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = dirname(__filename);
 
-const home = app.use("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "../views/home/index.html"));
+// Resolve the absolute path to index.html using path.resolve()
+const homePagePath = resolve(__dirname, "../views/home/index.html");
+
+router.get("/{*splat}", (req, res) => {
+  res.sendFile(homePagePath, (err) => {
+    if (err) {
+      console.error("Error sending file:", err);
+      res.status(500).send("Internal Server Error");
+    }
+  });
 });
 
-export default home;
+router.get("/{*splat}", (req, res) => {
+  res.sendFile(join(__dirname, "../views/home/index.html"));
+});
+
+// router.get("/", (req, res) => {
+//   res.sendFile(join(__dirname, "../views/home/index.html"));
+// });
+
+// router.get("/collection", (req, res) => {
+//   res.sendFile(join(__dirname, "../views/home/index.html"));
+// });
+
+// router.get("/collection/sql", (req, res) => {
+//   res.sendFile(join(__dirname, "../views/home/index.html"));
+// });
+
+// router.get("/collection/sql/stream", (req, res) => {
+//   res.sendFile(join(__dirname, "../views/home/index.html"));
+// });
+
+export default router;
