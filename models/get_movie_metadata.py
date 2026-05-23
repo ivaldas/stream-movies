@@ -188,6 +188,6 @@ def process_folder(directory: str, omdb_api_key: str):
 
 if __name__ == "__main__":
     OMDB_API_KEY = '34aef2c3'
-    TARGET_DIRECTORY = r"D:\videos\TV Shows\The Adventures of Mowgli 1973"
+    TARGET_DIRECTORY = r"D:\videos\TV Shows\Chernobyl"
 
     process_folder(TARGET_DIRECTORY, OMDB_API_KEY)
