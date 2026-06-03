@@ -13,9 +13,7 @@ import home from "./routes/home.js";
 import films from "./routes/filmsRoutes.js";
 import stream from "./routes/streamRoutes.js";
 import sql from "./routes/films_sql_routes.js";
-import lrtRoutes from "./routes/lrtRoutes.js";
-import lnkRoutes from "./routes/lnkRoutes.js";
-import tvplayRoutes from "./routes/tvplayRoutes.js";
+import liveTVRoutes from "./routes/liveTVRoutes.js";
 
 const app = express();
 
@@ -69,9 +67,7 @@ app.use(
 
 // ################ LIVE ROUTES ######################################
 
-app.use("/live/lrt", lrtRoutes);
-app.use("/live/lnk", lnkRoutes);
-app.use("/live/tv3", tvplayRoutes);
+app.use("/live", liveTVRoutes);
 
 // ################ API ROUTES #######################################
 
