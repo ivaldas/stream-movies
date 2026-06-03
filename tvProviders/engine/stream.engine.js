@@ -12,6 +12,8 @@ export class StreamEngine {
       checkperiod: 30,
       useClones: false,
     });
+
+    this.pending = new Map();
   }
 
   // -------------------------
@@ -32,8 +34,26 @@ export class StreamEngine {
     const cached = this.cache.get(cacheKey);
     if (cached) return cached;
 
-    const providers = getProviders();
+    if (this.pending.has(cacheKey)) {
+      return this.pending.get(cacheKey);
+    }
 
+    const promise = this._resolveInternal(providerKey, channelKey, cacheKey);
+
+    this.pending.set(cacheKey, promise);
+
+    try {
+      return await promise;
+    } finally {
+      this.pending.delete(cacheKey);
+    }
+  }
+
+  // -------------------------
+  // INTERNAL RESOLVE LOGIC
+  // -------------------------
+  async _resolveInternal(providerKey, channelKey, cacheKey) {
+    const providers = getProviders();
     const provider = providerKey ? getProvider(providerKey) : null;
 
     // invalid provider early exit
@@ -49,7 +69,6 @@ export class StreamEngine {
     }
 
     const selectedProviders = provider ? [provider] : providers;
-
     const errors = [];
 
     for (const p of selectedProviders) {
@@ -59,7 +78,6 @@ export class StreamEngine {
         const dto = this._normalize(p, raw);
 
         const ttl = this._computeTTL(dto);
-
         if (ttl > 0) {
           this.cache.set(cacheKey, dto, ttl);
         }
