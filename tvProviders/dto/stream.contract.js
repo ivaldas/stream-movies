@@ -12,9 +12,8 @@ export class StreamDTO {
     expiresAt = null,
     metadata = {},
   }) {
-    if (!streamUrl || typeof streamUrl !== "string") {
+    if (!streamUrl || typeof streamUrl !== "string")
       throw new Error("streamUrl is required");
-    }
 
     this.streamUrl = streamUrl.trim();
     this.type = type;
@@ -29,9 +28,8 @@ export class StreamDTO {
           ? new Date(expiresAt)
           : null;
 
-    if (this.expiresAt && Number.isNaN(this.expiresAt.getTime())) {
+    if (this.expiresAt && Number.isNaN(this.expiresAt.getTime()))
       this.expiresAt = null;
-    }
 
     this.metadata = Object.freeze({ ...metadata });
 

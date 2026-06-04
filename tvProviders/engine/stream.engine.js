@@ -1,7 +1,7 @@
 import NodeCache from "node-cache";
-import { getProviders, getProvider } from "../providers.js";
-import { StreamDTO } from "../stream.contract.js";
-import { ProviderError, PROVIDER_ERROR } from "../error.provider.js";
+import { getProviders, getProvider } from "../registry/providers.js";
+import { StreamDTO } from "../dto/stream.contract.js";
+import { ProviderError, PROVIDER_ERROR } from "../errors/error.provider.js";
 
 export class StreamEngine {
   constructor(options = {}) {
@@ -34,9 +34,7 @@ export class StreamEngine {
     const cached = this.cache.get(cacheKey);
     if (cached) return cached;
 
-    if (this.pending.has(cacheKey)) {
-      return this.pending.get(cacheKey);
-    }
+    if (this.pending.has(cacheKey)) return this.pending.get(cacheKey);
 
     const promise = this._resolveInternal(providerKey, channelKey, cacheKey);
 
@@ -54,6 +52,13 @@ export class StreamEngine {
   // -------------------------
   async _resolveInternal(providerKey, channelKey, cacheKey) {
     const providers = getProviders();
+    if (!providers.length) {
+      throw new ProviderError(
+        PROVIDER_ERROR.PROVIDER_NOT_FOUND,
+        "No providers registered",
+      );
+    }
+
     const provider = providerKey ? getProvider(providerKey) : null;
 
     // invalid provider early exit
@@ -74,17 +79,30 @@ export class StreamEngine {
     for (const p of selectedProviders) {
       try {
         const raw = await this._executeWithRetry(p, channelKey);
+        if (!raw || typeof raw !== "object") {
+          throw new ProviderError(
+            PROVIDER_ERROR.INVALID_RESPONSE,
+            "Provider returned invalid payload",
+          );
+        }
 
         const dto = this._normalize(p, raw);
 
         const ttl = this._computeTTL(dto);
-        if (ttl > 0) {
-          this.cache.set(cacheKey, dto, ttl);
-        }
+        if (ttl > 0) this.cache.set(this._key(p.key, channelKey), dto, ttl);
 
         return dto;
       } catch (err) {
-        errors.push(err);
+        errors.push(
+          err instanceof ProviderError
+            ? err
+            : new ProviderError(
+                PROVIDER_ERROR.UPSTREAM_FAILED,
+                "Unexpected error",
+                {},
+                err,
+              ),
+        );
       }
     }
 
@@ -113,9 +131,14 @@ export class StreamEngine {
         lastError = err;
 
         // no retry for invalid channel
-        if (err.code === PROVIDER_ERROR.CHANNEL_NOT_FOUND) {
+        if (
+          err instanceof ProviderError &&
+          err.code === PROVIDER_ERROR.CHANNEL_NOT_FOUND
+        ) {
           throw err;
         }
+        if (i < this.attempts - 1)
+          await new Promise((r) => setTimeout(r, 200 * (i + 1)));
       }
     }
 
@@ -142,8 +165,9 @@ export class StreamEngine {
     if (!stream.expiresAt) return 60;
 
     const diff = stream.expiresAt.getTime() - Date.now();
+    if (diff <= 0) return 0;
 
-    return Math.min(Math.max(Math.floor(diff / 1000), 0), this.MAX_TTL);
+    return Math.min(Math.floor(diff / 1000), this.MAX_TTL);
   }
 
   // -------------------------

@@ -1,13 +1,12 @@
 import axios from "axios";
 import { BaseProvider } from "./base.provider.js";
-import { ProviderError, PROVIDER_ERROR } from "./error.provider.js";
+import { ProviderError, PROVIDER_ERROR } from "./errors/error.provider.js";
 
 const API_URL = "https://lnk.lt/api/video/video-config";
 
 const extractExpiry = (url) => {
   try {
-    const u = new URL(url);
-    const t = Number(u.searchParams.get("tokenendtime"));
+    const t = Number(new URL(url).searchParams.get("tokenendtime"));
     return Number.isFinite(t) ? t * 1000 : null;
   } catch {
     return null;
@@ -30,27 +29,34 @@ export class LNKProvider extends BaseProvider {
       const { data } = await axios.get(`${API_URL}/${upstream.id}`, {
         timeout: 5000,
       });
-
       const v = data?.videoInfo;
 
-      if (!v?.videoUrl) {
+      if (!v?.videoUrl)
         throw new ProviderError(
           PROVIDER_ERROR.INVALID_RESPONSE,
           "Missing videoUrl",
           { channelKey, upstream },
         );
-      }
+
+      const expiry = extractExpiry(v.videoUrl);
 
       return {
         streamUrl: v.videoUrl,
         isLive: Boolean(v.isLive),
-        expiresAt: extractExpiry(v.videoUrl),
-        metadata: {
-          title: v.title,
-          channel: channelKey,
-        },
+        expiresAt: expiry ? new Date(expiry) : null,
+        metadata: { title: v.title, channel: channelKey },
+        region: "Lithuania",
       };
     } catch (err) {
+      if (err?.response?.status === 404) {
+        throw new ProviderError(
+          PROVIDER_ERROR.CHANNEL_NOT_FOUND,
+          `Channel not found: ${channelKey}`,
+          { provider: this.key },
+          err,
+        );
+      }
+
       if (err instanceof ProviderError) throw err;
 
       throw new ProviderError(
@@ -58,9 +64,7 @@ export class LNKProvider extends BaseProvider {
           ? PROVIDER_ERROR.TIMEOUT
           : PROVIDER_ERROR.UPSTREAM_FAILED,
         "LNK upstream failed",
-        {
-          status: err?.response?.status,
-        },
+        { status: err?.response?.status },
         err,
       );
     }

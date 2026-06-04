@@ -1,6 +1,6 @@
 import axios from "axios";
 import { BaseProvider } from "./base.provider.js";
-import { ProviderError, PROVIDER_ERROR } from "./error.provider.js";
+import { ProviderError, PROVIDER_ERROR } from "./errors/error.provider.js";
 
 const API_URL = "https://www.lrt.lt/servisai/stream_url/live/get_live_url.php";
 
@@ -22,16 +22,14 @@ export class LRTProvider extends BaseProvider {
         params: { channel: upstream.code },
         timeout: 5000,
       });
-
       const payload = data?.response?.data;
 
-      if (!payload?.content) {
+      if (!payload?.content)
         throw new ProviderError(
           PROVIDER_ERROR.INVALID_RESPONSE,
           "Missing stream content",
           { upstream },
         );
-      }
 
       const ts = Number(payload.expiresAt);
 
@@ -40,12 +38,20 @@ export class LRTProvider extends BaseProvider {
         backupStreamUrl: payload.content2 ?? null,
         audioUrl: payload.audio ?? null,
         isLive: true,
-        expiresAt: Number.isFinite(ts) ? ts * 1000 : null,
-        metadata: {
-          channel: upstream.name,
-        },
+        expiresAt: Number.isFinite(ts) ? new Date(ts * 1000) : null,
+        metadata: { channel: upstream.name },
+        region: "Lithuania",
       };
     } catch (err) {
+      if (err?.response?.status === 404) {
+        throw new ProviderError(
+          PROVIDER_ERROR.CHANNEL_NOT_FOUND,
+          `Channel not found: ${channelKey}`,
+          { provider: this.key },
+          err,
+        );
+      }
+
       if (err instanceof ProviderError) throw err;
 
       throw new ProviderError(
@@ -53,10 +59,7 @@ export class LRTProvider extends BaseProvider {
           ? PROVIDER_ERROR.TIMEOUT
           : PROVIDER_ERROR.UPSTREAM_FAILED,
         "LRT upstream failed",
-        {
-          status: err?.response?.status,
-          data: err?.response?.data,
-        },
+        { status: err?.response?.status, data: err?.response?.data },
         err,
       );
     }

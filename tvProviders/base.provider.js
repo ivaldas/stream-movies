@@ -1,25 +1,23 @@
-import { ProviderError, PROVIDER_ERROR } from "./error.provider.js";
+import { ProviderError, PROVIDER_ERROR } from "./errors/error.provider.js";
 
 export class BaseProvider {
   constructor(key, displayName, channels = {}) {
-    if (!key) {
+    if (!key)
       throw new ProviderError(
         PROVIDER_ERROR.INVALID_RESPONSE,
         "Provider must have a key",
       );
-    }
 
     this.key = key.toLowerCase();
     this.displayName = displayName;
 
     this.channels = Object.fromEntries(
       Object.entries(channels).map(([k, v]) => {
-        if (!v) {
+        if (!v)
           throw new ProviderError(
             PROVIDER_ERROR.INVALID_RESPONSE,
             `Invalid channel config: ${k}`,
           );
-        }
         return [k.toLowerCase(), v];
       }),
     );
@@ -34,16 +32,18 @@ export class BaseProvider {
     return Object.keys(this.channels);
   }
 
+  supportsChannel(channelKey) {
+    return !!this.resolveChannel(channelKey);
+  }
+
   async fetch(channelKey) {
     const upstream = this.resolveChannel(channelKey);
-
-    if (!upstream) {
+    if (!upstream)
       throw new ProviderError(
         PROVIDER_ERROR.CHANNEL_NOT_FOUND,
         `Channel not found: ${channelKey}`,
         { provider: this.key },
       );
-    }
 
     return this._fetch(upstream, channelKey);
   }

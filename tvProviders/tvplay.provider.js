@@ -6,12 +6,12 @@ export class TVPlayProvider extends BaseProvider {
       tv3: {
         name: "TV3",
         streamUrl:
-          "http://cdnlb.tvplayhome.lt/live/eds/TV3_LT_SD/GO3_LIVE_HLS/TV3_LT_SD.m3u8",
+          "https://cdnlb.tvplayhome.lt/live/eds/TV3_LT_SD/GO3_LIVE_HLS/TV3_LT_SD.m3u8",
       },
       tv6: {
         name: "TV6",
         streamUrl:
-          "http://cdnlb.tvplayhome.lt/live/eds/TV6_LT_SD/GO3_LIVE_HLS/TV6_LT_SD.m3u8",
+          "https://cdnlb.tvplayhome.lt/live/eds/TV6_LT_SD/GO3_LIVE_HLS/TV6_LT_SD.m3u8",
       },
       lrytas: {
         name: "Lietuvos ryto TV",
@@ -32,7 +32,6 @@ export class TVPlayProvider extends BaseProvider {
       expiresAt: null,
       metadata: {
         channel: upstream.name,
-        provider: this.key,
       },
     };
   }
