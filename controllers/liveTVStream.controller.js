@@ -1,6 +1,5 @@
 import { StreamEngine } from "../tvProviders/engine/stream.engine.js";
 import { PROVIDER_ERROR } from "../tvProviders/errors/error.provider.js";
-import { validateStream } from "../tvProviders/tvProvider utils/streamValidator.js";
 
 const engine = new StreamEngine({
   attempts: 2,
@@ -33,20 +32,21 @@ export const getLiveTVStream = async (req, res) => {
     // -----------------------------
     // Resolve stream
     // -----------------------------
-    const stream = await engine.resolve(providerKey, channelKey);
+    const { stream, health } = await engine.resolve(providerKey, channelKey);
 
-    // async validation, does NOT block response
-    validateStream(stream.streamUrl).then((ok) => {
-      if (!ok) {
-        console.warn(
-          `Stream seems down: provider=${providerKey} channel=${channelKey} url=${stream.streamUrl}`,
-        );
-      }
-    });
+    // // optionally fail if bad
+    // if (health === "bad") {
+    //   return send(res, 502, false, null, {
+    //     code: "STREAM_UNAVAILABLE",
+    //     message: "Stream URL is not reachable",
+    //     meta: { url: stream.streamUrl },
+    //   });
+    // }
 
     return send(res, 200, true, {
       fetchedAt: new Date().toISOString(),
       stream,
+      health,
     });
   } catch (err) {
     // -----------------------------

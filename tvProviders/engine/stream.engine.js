@@ -2,6 +2,7 @@ import NodeCache from "node-cache";
 import { getProviders, getProvider } from "../registry/providers.js";
 import { StreamDTO } from "../dto/stream.contract.js";
 import { ProviderError, PROVIDER_ERROR } from "../errors/error.provider.js";
+import { validateStream } from "../tvProvider utils/streamValidator.util.js";
 
 export class StreamEngine {
   constructor(options = {}) {
@@ -11,6 +12,11 @@ export class StreamEngine {
     this.cache = new NodeCache({
       checkperiod: 30,
       useClones: false,
+    });
+
+    this.healthCache = new NodeCache({
+      stdTTL: 60, // cache health for 60s
+      checkperiod: 30,
     });
 
     this.pending = new Map();
@@ -23,6 +29,25 @@ export class StreamEngine {
     return `stream:${providerKey || "any"}:${String(channelKey)
       .toLowerCase()
       .trim()}`;
+  }
+
+  async _getStreamHealth(url) {
+    const cached = this.healthCache.get(url);
+    if (cached !== undefined) return cached;
+
+    try {
+      const ok = await validateStream(url);
+      // console.log("health result:", ok);
+      // console.log("type:", typeof ok);
+
+      this.healthCache.set(url, ok);
+      return ok;
+    } catch (err) {
+      console.error("_getStreamHealth error:", err);
+
+      this.healthCache.set(url, false);
+      return false;
+    }
   }
 
   // -------------------------
@@ -88,10 +113,20 @@ export class StreamEngine {
 
         const dto = this._normalize(p, raw);
 
-        const ttl = this._computeTTL(dto);
-        if (ttl > 0) this.cache.set(this._key(p.key, channelKey), dto, ttl);
+        // const isValid = await validateStream(dto.streamUrl);
+        const isValid = await this._getStreamHealth(dto.streamUrl);
 
-        return dto;
+        const result = {
+          stream: dto,
+          health: isValid ? "ok" : "bad",
+        };
+
+        if (isValid) {
+          const ttl = this._computeTTL(dto);
+          if (ttl > 0) this.cache.set(cacheKey, result, ttl);
+        }
+
+        return result;
       } catch (err) {
         errors.push(
           err instanceof ProviderError
