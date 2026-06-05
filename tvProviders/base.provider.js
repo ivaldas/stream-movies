@@ -4,7 +4,7 @@ export class BaseProvider {
   constructor(key, displayName, channels = {}) {
     if (!key)
       throw new ProviderError(
-        PROVIDER_ERROR.INVALID_RESPONSE,
+        PROVIDER_ERROR.CONFIG_ERROR,
         "Provider must have a key",
       );
 
@@ -42,7 +42,7 @@ export class BaseProvider {
       throw new ProviderError(
         PROVIDER_ERROR.CHANNEL_NOT_FOUND,
         `Channel not found: ${channelKey}`,
-        { provider: this.key },
+        { provider: this.key, channelKey },
       );
 
     return this._fetch(upstream, channelKey);

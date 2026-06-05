@@ -1,6 +1,9 @@
 import axios from "axios";
+
 import { BaseProvider } from "./base.provider.js";
 import { ProviderError, PROVIDER_ERROR } from "./errors/error.provider.js";
+import { mapHttpError } from "./errors/httpErrorMapper.js";
+import { StreamDTO } from "./dto/stream.contract.js";
 
 const API_URL = "https://lnk.lt/api/video/video-config";
 
@@ -31,42 +34,35 @@ export class LNKProvider extends BaseProvider {
       });
       const v = data?.videoInfo;
 
-      if (!v?.videoUrl)
+      if (!v?.videoUrl || typeof v.videoUrl !== "string")
         throw new ProviderError(
           PROVIDER_ERROR.INVALID_RESPONSE,
-          "Missing videoUrl",
+          "Missing streamUrl",
           { channelKey, upstream },
         );
 
       const expiry = extractExpiry(v.videoUrl);
 
-      return {
-        streamUrl: v.videoUrl,
+      return new StreamDTO({
+        streamUrl: v.videoUrl.trim(),
         isLive: Boolean(v.isLive),
+        isStreamable: !v.contentRestrict,
         expiresAt: expiry ? new Date(expiry) : null,
-        metadata: { title: v.title, channel: channelKey },
-        region: "Lithuania",
-      };
+        metadata: {
+          channel: channelKey,
+          channelName: v.title,
+          code: upstream.id,
+          region: "Lithuania",
+        },
+      });
     } catch (err) {
-      if (err?.response?.status === 404) {
-        throw new ProviderError(
-          PROVIDER_ERROR.CHANNEL_NOT_FOUND,
-          `Channel not found: ${channelKey}`,
-          { provider: this.key },
-          err,
-        );
-      }
-
       if (err instanceof ProviderError) throw err;
 
-      throw new ProviderError(
-        err.code === "ECONNABORTED"
-          ? PROVIDER_ERROR.TIMEOUT
-          : PROVIDER_ERROR.UPSTREAM_FAILED,
-        "LNK upstream failed",
-        { status: err?.response?.status },
-        err,
-      );
+      throw mapHttpError(err, {
+        provider: this.key,
+        channel: channelKey,
+        upstream: upstream.id,
+      });
     }
   }
 }

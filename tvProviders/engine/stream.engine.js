@@ -35,19 +35,13 @@ export class StreamEngine {
     const cached = this.healthCache.get(url);
     if (cached !== undefined) return cached;
 
-    try {
-      const ok = await validateStream(url);
-      // console.log("health result:", ok);
-      // console.log("type:", typeof ok);
+    const result = await validateStream(url).catch(() => ({
+      ok: false,
+      reason: "exception",
+    }));
 
-      this.healthCache.set(url, ok);
-      return ok;
-    } catch (err) {
-      console.error("_getStreamHealth error:", err);
-
-      this.healthCache.set(url, false);
-      return false;
-    }
+    this.healthCache.set(url, result);
+    return result;
   }
 
   // -------------------------
@@ -57,7 +51,7 @@ export class StreamEngine {
     const cacheKey = this._key(providerKey, channelKey);
 
     const cached = this.cache.get(cacheKey);
-    if (cached) return cached;
+    if (cached !== undefined) return cached;
 
     if (this.pending.has(cacheKey)) return this.pending.get(cacheKey);
 
@@ -113,17 +107,28 @@ export class StreamEngine {
 
         const dto = this._normalize(p, raw);
 
-        // const isValid = await validateStream(dto.streamUrl);
-        const isValid = await this._getStreamHealth(dto.streamUrl);
+        const healthResult = await this._getStreamHealth(dto.streamUrl);
+
+        const isStreamable = healthResult.ok;
 
         const result = {
-          stream: dto,
-          health: isValid ? "ok" : "bad",
+          stream: new StreamDTO({
+            ...dto,
+            isStreamable, // OVERRIDE provider value
+          }),
+          health: healthResult.ok ? "ok" : "bad",
+          healthReason: healthResult.reason,
+          canPlay: isStreamable,
         };
 
-        if (isValid) {
-          const ttl = this._computeTTL(dto);
-          if (ttl > 0) this.cache.set(cacheKey, result, ttl);
+        const ttl = this._computeTTL(dto);
+
+        if (ttl > 0) {
+          this.cache.set(
+            cacheKey,
+            result,
+            healthResult.ok ? ttl : Math.min(ttl, 30),
+          );
         }
 
         return result;
@@ -184,6 +189,16 @@ export class StreamEngine {
   // NORMALIZATION
   // -------------------------
   _normalize(provider, raw) {
+    if (raw instanceof StreamDTO) {
+      return new StreamDTO({
+        ...raw,
+        metadata: {
+          ...raw.metadata,
+          provider: provider.displayName,
+        },
+      });
+    }
+
     return new StreamDTO({
       ...raw,
       metadata: {

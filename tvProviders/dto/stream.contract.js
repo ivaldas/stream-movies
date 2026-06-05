@@ -7,6 +7,7 @@ export class StreamDTO {
     streamUrl,
     type = STREAM_TYPES.HLS,
     isLive = true,
+    isStreamable = true,
     audioUrl = null,
     backupStreamUrl = null,
     expiresAt = null,
@@ -18,6 +19,7 @@ export class StreamDTO {
     this.streamUrl = streamUrl.trim();
     this.type = type;
     this.isLive = Boolean(isLive);
+    this.isStreamable = Boolean(isStreamable);
     this.audioUrl = audioUrl;
     this.backupStreamUrl = backupStreamUrl;
 

@@ -1,10 +1,7 @@
 import axios from "axios";
 
 /**
- * Detects HLS stream validity:
- * - supports master playlists
- * - supports media playlists
- * - validates at least one segment (light probe)
+ * Stream validation result is intentionally richer than boolean
  */
 export async function validateStream(url) {
   try {
@@ -16,17 +13,35 @@ export async function validateStream(url) {
       },
       responseType: "text",
       validateStatus: () => true,
+      maxContentLength: 2_000_000,
     });
 
-    if (res.status < 200 || res.status >= 400) {
-      return false;
+    const status = res.status;
+    const text = String(res.data || "").trim();
+
+    // -----------------------------
+    // HTTP-level failures
+    // -----------------------------
+    if (status < 200 || status >= 400) {
+      return { ok: false, reason: "http_error" };
     }
 
-    const text = String(res.data).trim();
+    // -----------------------------
+    // Access denied / CDN blocks
+    // -----------------------------
+    if (
+      text.includes("AccessDenied") ||
+      text.includes("<Error>") ||
+      text.includes("SignatureDoesNotMatch")
+    ) {
+      return { ok: false, reason: "access_denied" };
+    }
 
-    // must be HLS
+    // -----------------------------
+    // Must be HLS
+    // -----------------------------
     if (!text.startsWith("#EXTM3U")) {
-      return false;
+      return { ok: false, reason: "not_hls" };
     }
 
     const lines = text
@@ -34,15 +49,15 @@ export async function validateStream(url) {
       .map((l) => l.trim())
       .filter(Boolean);
 
-    const hasVariantPlaylist = text.includes("#EXT-X-STREAM-INF");
-    const hasMediaSegments = text.includes("#EXTINF");
+    const hasVariant = text.includes("#EXT-X-STREAM-INF");
+    const hasSegments = text.includes("#EXTINF");
 
     // -----------------------------
-    // CASE 1: MASTER PLAYLIST
+    // MASTER PLAYLIST
     // -----------------------------
-    if (hasVariantPlaylist && !hasMediaSegments) {
+    if (hasVariant && !hasSegments) {
       const variantLine = lines.find((l) => l && !l.startsWith("#"));
-      if (!variantLine) return false;
+      if (!variantLine) return { ok: false, reason: "no_variant" };
 
       const variantUrl = new URL(variantLine, url).href;
 
@@ -53,25 +68,24 @@ export async function validateStream(url) {
       });
 
       if (variantRes.status < 200 || variantRes.status >= 400) {
-        return false;
+        return { ok: false, reason: "variant_http_error" };
       }
 
-      const variantText = String(variantRes.data).trim();
+      const variantText = String(variantRes.data || "");
 
-      // if variant is still a playlist → accept as valid structure
-      if (variantText.startsWith("#EXTM3U")) {
-        return true;
+      if (!variantText.startsWith("#EXTM3U")) {
+        return { ok: false, reason: "invalid_variant" };
       }
 
-      return false;
+      return { ok: true, reason: "master_playlist" };
     }
 
     // -----------------------------
-    // CASE 2: MEDIA PLAYLIST
+    // MEDIA PLAYLIST
     // -----------------------------
-    if (hasMediaSegments) {
+    if (hasSegments) {
       const mediaLine = lines.find((l) => l && !l.startsWith("#"));
-      if (!mediaLine) return false;
+      if (!mediaLine) return { ok: false, reason: "no_media_segment" };
 
       const mediaUrl = new URL(mediaLine, url).href;
 
@@ -79,31 +93,33 @@ export async function validateStream(url) {
         timeout: 5000,
         responseType: "arraybuffer",
         validateStatus: () => true,
+        maxContentLength: 2_000_000,
       });
 
       if (probe.status < 200 || probe.status >= 400) {
-        return false;
+        return { ok: false, reason: "segment_http_error" };
       }
 
       const buffer = Buffer.from(probe.data);
 
-      // MPEG-TS
       const isMpegTs = buffer[0] === 0x47;
-
-      // fMP4 (CMAF)
       const isFmp4 =
         buffer.length > 8 && buffer.toString("utf8", 4, 8) === "ftyp";
 
-      return isMpegTs || isFmp4;
+      return {
+        ok: isMpegTs || isFmp4,
+        reason: isMpegTs || isFmp4 ? "valid_media" : "invalid_media",
+      };
     }
 
     // -----------------------------
-    // CASE 3: EDGE CASE (audio-only or simple playlist)
+    // EDGE CASE (audio / simple HLS)
     // -----------------------------
-    // If it's HLS but no segments detected, treat as valid structure
-    // (audio HLS often falls here)
-    return hasVariantPlaylist || text.includes("#EXT-X-TARGETDURATION");
-  } catch {
-    return false;
+    return {
+      ok: hasVariant || text.includes("#EXT-X-TARGETDURATION"),
+      reason: "edge_case",
+    };
+  } catch (err) {
+    return { ok: false, reason: "exception" };
   }
 }

@@ -1,8 +1,20 @@
 import axios from "axios";
+
 import { BaseProvider } from "./base.provider.js";
 import { ProviderError, PROVIDER_ERROR } from "./errors/error.provider.js";
+import { mapHttpError } from "./errors/httpErrorMapper.js";
+import { StreamDTO } from "./dto/stream.contract.js";
 
 const API_URL = "https://www.lrt.lt/servisai/stream_url/live/get_live_url.php";
+
+const extractExpiry = (url) => {
+  try {
+    const t = Number(new URL(url).searchParams.get("Expires"));
+    return Number.isFinite(t) ? t * 1000 : null;
+  } catch {
+    return null;
+  }
+};
 
 export class LRTProvider extends BaseProvider {
   constructor() {
@@ -16,7 +28,7 @@ export class LRTProvider extends BaseProvider {
     });
   }
 
-  async _fetch(upstream) {
+  async _fetch(upstream, channelKey) {
     try {
       const { data } = await axios.get(API_URL, {
         params: { channel: upstream.code },
@@ -24,44 +36,44 @@ export class LRTProvider extends BaseProvider {
       });
       const payload = data?.response?.data;
 
-      if (!payload?.content)
+      if (
+        !payload ||
+        typeof payload.content !== "string" ||
+        !payload.content.trim()
+      )
         throw new ProviderError(
           PROVIDER_ERROR.INVALID_RESPONSE,
-          "Missing stream content",
-          { upstream },
+          "Missing streamUrl",
+          { channelKey, upstream },
         );
 
-      const ts = Number(payload.expiresAt);
+      const expiry = extractExpiry(payload.content);
 
-      return {
-        streamUrl: payload.content,
+      return new StreamDTO({
+        streamUrl: payload.content.trim(),
         backupStreamUrl: payload.content2 ?? null,
         audioUrl: payload.audio ?? null,
         isLive: true,
-        expiresAt: Number.isFinite(ts) ? new Date(ts * 1000) : null,
-        metadata: { channel: upstream.name },
-        region: "Lithuania",
-      };
+        isStreamable: !payload.restriction,
+        expiresAt: expiry ? new Date(expiry) : null,
+        metadata: {
+          channel: channelKey,
+          channelName: upstream.name,
+          code: upstream.code,
+          hasBackup: !!payload.content2,
+          hasAudio: !!payload.audio,
+          restriction: payload.restriction || null,
+          responseTime: payload.time || null,
+          region: "Lithuania",
+        },
+      });
     } catch (err) {
-      if (err?.response?.status === 404) {
-        throw new ProviderError(
-          PROVIDER_ERROR.CHANNEL_NOT_FOUND,
-          `Channel not found: ${channelKey}`,
-          { provider: this.key },
-          err,
-        );
-      }
-
       if (err instanceof ProviderError) throw err;
 
-      throw new ProviderError(
-        err.code === "ECONNABORTED"
-          ? PROVIDER_ERROR.TIMEOUT
-          : PROVIDER_ERROR.UPSTREAM_FAILED,
-        "LRT upstream failed",
-        { status: err?.response?.status, data: err?.response?.data },
-        err,
-      );
+      throw mapHttpError(err, {
+        provider: this.key,
+        channel: upstream.code,
+      });
     }
   }
 }
