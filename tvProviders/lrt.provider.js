@@ -54,7 +54,7 @@ export class LRTProvider extends BaseProvider {
         backupStreamUrl: payload.content2 ?? null,
         audioUrl: payload.audio ?? null,
         isLive: true,
-        isStreamable: !payload.restriction,
+        // isStreamable: !payload.restriction,
         expiresAt: expiry ? new Date(expiry) : null,
         metadata: {
           channel: channelKey,

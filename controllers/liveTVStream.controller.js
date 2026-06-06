@@ -32,7 +32,8 @@ export const getLiveTVStream = async (req, res) => {
     // -----------------------------
     // Resolve stream
     // -----------------------------
-    const { stream, health } = await engine.resolve(providerKey, channelKey);
+    const result = await engine.resolve(providerKey, channelKey);
+    const { stream, health, healthStage, reason, diagnostics } = result;
 
     // // optionally fail if bad
     // if (health === "bad") {
@@ -47,6 +48,9 @@ export const getLiveTVStream = async (req, res) => {
       fetchedAt: new Date().toISOString(),
       stream,
       health,
+      healthStage,
+      reason,
+      diagnostics,
     });
   } catch (err) {
     // -----------------------------

@@ -7,13 +7,8 @@ export function probeStreamWithFFmpeg(url, timeoutMs = 8000) {
       "-loglevel",
       "error",
 
-      // IMPORTANT: emulate browser headers
       "-headers",
-      [
-        "User-Agent: Mozilla/5.0\r\n",
-        "Referer: https://www.google.com/\r\n",
-        "Origin: https://www.google.com\r\n",
-      ].join(""),
+      ["-user_agent", "Mozilla/5.0"].join(""),
 
       "-reconnect",
       "1",

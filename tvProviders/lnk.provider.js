@@ -46,7 +46,7 @@ export class LNKProvider extends BaseProvider {
       return new StreamDTO({
         streamUrl: v.videoUrl.trim(),
         isLive: Boolean(v.isLive),
-        isStreamable: !v.contentRestrict,
+        // isStreamable: !v.contentRestrict,
         expiresAt: expiry ? new Date(expiry) : null,
         metadata: {
           channel: channelKey,

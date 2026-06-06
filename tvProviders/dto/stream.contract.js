@@ -1,6 +1,16 @@
 export const STREAM_TYPES = Object.freeze({
   HLS: "hls",
+  DASH: "dash",
 });
+
+function deepFreeze(obj) {
+  Object.keys(obj).forEach((key) => {
+    if (typeof obj[key] === "object" && obj[key] !== null) {
+      deepFreeze(obj[key]);
+    }
+  });
+  return Object.freeze(obj);
+}
 
 export class StreamDTO {
   constructor({
@@ -20,8 +30,10 @@ export class StreamDTO {
     this.type = type;
     this.isLive = Boolean(isLive);
     this.isStreamable = Boolean(isStreamable);
-    this.audioUrl = audioUrl;
-    this.backupStreamUrl = backupStreamUrl;
+    this.audioUrl = audioUrl ? String(audioUrl).trim() : null;
+    this.backupStreamUrl = backupStreamUrl
+      ? String(backupStreamUrl).trim()
+      : null;
 
     this.expiresAt =
       expiresAt instanceof Date
@@ -33,7 +45,7 @@ export class StreamDTO {
     if (this.expiresAt && Number.isNaN(this.expiresAt.getTime()))
       this.expiresAt = null;
 
-    this.metadata = Object.freeze({ ...metadata });
+    this.metadata = deepFreeze({ ...metadata });
 
     Object.freeze(this);
   }

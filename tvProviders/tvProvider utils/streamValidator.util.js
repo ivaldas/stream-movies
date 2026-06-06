@@ -8,12 +8,13 @@ export async function validateStream(url) {
     const res = await axios.get(url, {
       timeout: 5000,
       headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "*/*",
+        "User-Agent": "Mozilla/5.0 (compatible; StreamEngine/1.0)",
+        Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
       },
       responseType: "text",
       validateStatus: () => true,
-      maxContentLength: 2_000_000,
+      maxContentLength: 5_000_000,
+      maxRedirects: 10,
     });
 
     const status = res.status;
@@ -120,6 +121,6 @@ export async function validateStream(url) {
       reason: "edge_case",
     };
   } catch (err) {
-    return { ok: false, reason: "exception" };
+    return { ok: false, reason: "streamvalidator_exception" };
   }
 }
