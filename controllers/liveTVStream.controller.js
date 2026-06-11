@@ -1,5 +1,7 @@
-import { StreamEngine } from "../tvProviders/engine/stream.engine.js";
-import { PROVIDER_ERROR } from "../tvProviders/errors/error.provider.js";
+import { randomUUID } from "crypto";
+
+import { StreamEngine } from "../tvProviders/engine/StreamEngine.js";
+import { PROVIDER_ERROR } from "../tvProviders/errors/ProviderError.js";
 
 const engine = new StreamEngine({
   attempts: 2,
@@ -7,25 +9,45 @@ const engine = new StreamEngine({
 });
 
 const normalizeParam = (value) =>
-  typeof value === "string" ? value.trim().toLowerCase() : null;
+  typeof value === "string" ? value.trim().toLowerCase() || null : null;
 
-const send = (res, status, success, data = null, error = null) =>
-  res
-    .status(status)
-    .json({ success, data, error, timestamp: new Date().toISOString() });
+const createCtx = () => ({
+  requestId: randomUUID(),
+  startedAt: Date.now(),
+  timestamp: new Date().toISOString(),
+});
+
+const send = (res, status, ctx, success, payload = null) => {
+  const now = Date.now();
+  return res.status(status).json({
+    success,
+    requestId: ctx.requestId,
+    timestamp: ctx.timestamp,
+    durationMs: now - ctx.startedAt,
+    ...(success ? { data: payload } : { error: payload }),
+  });
+};
+
+const apiError = (code, message, meta = {}) => ({ code, message, meta });
+const fail = (res, ctx, code, message, status = 500, meta = {}) =>
+  send(res, status, ctx, false, apiError(code, message, meta));
 
 export const getLiveTVStream = async (req, res) => {
-  const providerKey = normalizeParam(req.params.provider);
-  const channelKey = normalizeParam(req.params.channel);
+  const ctx = createCtx();
+  const { provider, channel } = req.params;
+  const providerKey = normalizeParam(provider);
+  const channelKey = normalizeParam(channel);
 
   // -----------------------------
   // Input validation
   // -----------------------------
   if (!providerKey || !channelKey) {
-    return send(res, 400, false, null, {
-      code: "INVALID_PARAMS",
-      message: "Provider and channel are required",
-    });
+    return fail(
+      res,
+      ctx,
+      "INVALID_PARAMS",
+      "Provider and channel are required",
+    );
   }
 
   try {
@@ -33,19 +55,19 @@ export const getLiveTVStream = async (req, res) => {
     // Resolve stream
     // -----------------------------
     const result = await engine.resolve(providerKey, channelKey);
+    if (result == null) {
+      return fail(
+        res,
+        ctx,
+        "INVALID_ENGINE_RESPONSE",
+        "Stream engine returned empty result",
+        502,
+      );
+    }
+
     const { stream, health, healthStage, reason, diagnostics } = result;
 
-    // // optionally fail if bad
-    // if (health === "bad") {
-    //   return send(res, 502, false, null, {
-    //     code: "STREAM_UNAVAILABLE",
-    //     message: "Stream URL is not reachable",
-    //     meta: { url: stream.streamUrl },
-    //   });
-    // }
-
-    return send(res, 200, true, {
-      fetchedAt: new Date().toISOString(),
+    return send(res, 200, ctx, true, {
       stream,
       health,
       healthStage,
@@ -65,12 +87,15 @@ export const getLiveTVStream = async (req, res) => {
       [PROVIDER_ERROR.UNIMPLEMENTED]: 501,
     };
 
-    const status = statusMap[err?.code] || 500;
+    const status = statusMap[err?.code] ?? 500;
 
-    return send(res, status, false, null, {
-      code: err?.code || "INTERNAL_ERROR",
-      message: err?.message || "Unexpected error",
-      meta: err?.meta ?? {},
-    });
+    return fail(
+      res,
+      ctx,
+      err?.code || "INTERNAL_ERROR",
+      err?.message || "Unexpected error",
+      status,
+      err?.meta ?? {},
+    );
   }
 };

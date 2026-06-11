@@ -1,13 +1,36 @@
-import { LRTProvider } from "../lrt.provider.js";
-import { LNKProvider } from "../lnk.provider.js";
-import { TVPlayProvider } from "../tvplay.provider.js";
+import { LRTProvider } from "../LRTprovider.js";
+import { LNKProvider } from "../LNKprovider.js";
+import { TVPlayProvider } from "../TVPlayProvider.js";
+import { ProviderError, PROVIDER_ERROR } from "../errors/ProviderError.js";
 
 const providers = new Map();
 
-function register(provider) {
-  const key = provider.key.toLowerCase();
+const normalizeKey = (key) =>
+  typeof key === "string" ? key.trim().toLowerCase() : null;
 
-  if (providers.has(key)) throw new Error(`Duplicate provider: ${key}`);
+function register(provider) {
+  if (!provider || typeof provider !== "object") {
+    throw new ProviderError(
+      PROVIDER_ERROR.CONFIG_ERROR,
+      "Provider must be an object",
+    );
+  }
+
+  if (typeof provider.key !== "string") {
+    throw new ProviderError(
+      PROVIDER_ERROR.CONFIG_ERROR,
+      "Provider key must be a string",
+    );
+  }
+
+  const key = normalizeKey(provider.key);
+
+  if (providers.has(key)) {
+    throw new ProviderError(
+      PROVIDER_ERROR.CONFIG_ERROR,
+      `Duplicate provider: ${key}`,
+    );
+  }
 
   providers.set(key, provider);
 }
@@ -18,12 +41,16 @@ register(new TVPlayProvider());
 
 export const getProviders = () => [...providers.values()];
 
-export const getProvider = (key) => providers.get(key?.toLowerCase()) ?? null;
+export const getProvider = (key) => {
+  if (typeof key !== "string") return null;
+  return providers.get(normalizeKey(key)) ?? null;
+};
 
 export const getAllChannels = () =>
-  [...providers.values()].flatMap((p) =>
-    p.getAvailableChannels().map((c) => ({
+  getProviders().flatMap((p) =>
+    (p.getAvailableChannels?.() ?? []).map((channel) => ({
       provider: p.key,
-      channel: c,
+      channel,
+      displayName: p.displayName,
     })),
   );

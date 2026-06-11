@@ -1,13 +1,14 @@
-import { ProviderError, PROVIDER_ERROR } from "./error.provider.js";
+import { ProviderError, PROVIDER_ERROR } from "./ProviderError.js";
 
 export function mapHttpError(err, context = {}) {
   const status = err?.response?.status;
+  const providerName = context.provider || "Provider";
 
   // Timeout (axios-specific)
-  if (err?.code === "ECONNABORTED") {
+  if (isTimeoutError(err)) {
     return new ProviderError(
       PROVIDER_ERROR.TIMEOUT,
-      `${context.provider || "Provider"} request timed out`,
+      `${providerName} request timed out`,
       context,
       err,
     );
@@ -16,18 +17,20 @@ export function mapHttpError(err, context = {}) {
   if (!status) {
     return new ProviderError(
       PROVIDER_ERROR.UPSTREAM_FAILED,
-      `${context.provider || "Provider"} network failure`,
+      `${providerName} network failure`,
       context,
       err,
     );
   }
+
+  const meta = { ...context, status };
 
   switch (status) {
     case 400:
       return new ProviderError(
         PROVIDER_ERROR.INVALID_RESPONSE,
         "Invalid upstream request",
-        { ...context, status },
+        meta,
         err,
       );
 
@@ -36,7 +39,7 @@ export function mapHttpError(err, context = {}) {
       return new ProviderError(
         PROVIDER_ERROR.PROVIDER_NOT_FOUND,
         "Access denied by upstream",
-        { ...context, status },
+        meta,
         err,
       );
 
@@ -45,7 +48,7 @@ export function mapHttpError(err, context = {}) {
       return new ProviderError(
         PROVIDER_ERROR.CHANNEL_NOT_FOUND,
         "Channel not found",
-        { ...context, status },
+        meta,
         err,
       );
 
@@ -53,7 +56,7 @@ export function mapHttpError(err, context = {}) {
       return new ProviderError(
         PROVIDER_ERROR.UPSTREAM_FAILED,
         "Upstream rate limited",
-        { ...context, status },
+        meta,
         err,
       );
 
@@ -61,7 +64,7 @@ export function mapHttpError(err, context = {}) {
       return new ProviderError(
         PROVIDER_ERROR.UPSTREAM_FAILED,
         "Upstream request failed",
-        { ...context, status },
+        meta,
         err,
       );
   }

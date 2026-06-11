@@ -1,4 +1,4 @@
-import { ProviderError, PROVIDER_ERROR } from "./errors/error.provider.js";
+import { ProviderError, PROVIDER_ERROR } from "./errors/ProviderError.js";
 
 export class BaseProvider {
   constructor(key, displayName, channels = {}) {
@@ -9,7 +9,7 @@ export class BaseProvider {
       );
 
     this.key = key.toLowerCase();
-    this.displayName = displayName;
+    this.displayName = displayName || key;
 
     this.channels = Object.fromEntries(
       Object.entries(channels).map(([k, v]) => {
@@ -24,8 +24,9 @@ export class BaseProvider {
   }
 
   resolveChannel(channelKey) {
-    if (!channelKey) return null;
-    return this.channels[channelKey.toLowerCase()] ?? null;
+    return channelKey
+      ? (this.channels[channelKey.toLowerCase()] ?? null)
+      : null;
   }
 
   getAvailableChannels() {
@@ -48,11 +49,11 @@ export class BaseProvider {
     return this._fetch(upstream, channelKey);
   }
 
-  async _fetch() {
+  async _fetch(upstream, channelKey) {
     throw new ProviderError(
       PROVIDER_ERROR.UNIMPLEMENTED,
       "_fetch not implemented",
-      { provider: this.key },
+      { provider: this.key, channelKey },
     );
   }
 }
