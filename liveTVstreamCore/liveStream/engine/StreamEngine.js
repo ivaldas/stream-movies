@@ -1,9 +1,12 @@
-import { getProviders, getProvider } from "../registry/providers.js";
-import { StreamDTO } from "../dto/StreamDTO.contract.js";
+import {
+  getProviders,
+  getProvider,
+} from "../../registry/providers.registry.js";
+import { StreamDTO } from "../models/StreamDTO.contract.js";
 import { ProviderError, PROVIDER_ERROR } from "../errors/ProviderError.js";
-import { validateStream } from "../tvProvider utils/streamValidator.util.js";
-import { getFFmpegHealth } from "../tvProvider utils/ffmpeg.health.util.js";
-import { SingleFlightCache } from "../tvProvider utils/SingleFlightCache.js";
+import { validateStream } from "../../tvStream utils/streamValidator.util.js";
+import { getFFmpegHealth } from "../../tvStream utils/ffmpeg.health.util.js";
+import { SingleFlightCache } from "../../tvStream utils/SingleFlightCache.js";
 
 export class StreamEngine {
   constructor(options = {}) {
@@ -104,65 +107,67 @@ export class StreamEngine {
       };
 
       const validation = await validateStream(url);
-
       if (!validation.ok) {
         result.reason = validation.reason;
         return result;
       }
 
-      let playlistText = "";
-
+      let playlist = "";
       try {
-        playlistText = await this._fetchPlaylistRecursive(url);
+        playlist = await this._fetchPlaylistRecursive(url);
       } catch {
-        result.reason = "playlist_fetch_failed";
-        result.stage = "network_error";
-        return result;
+        playlist = "";
       }
 
-      const hasSkd = /skd:\/\//i.test(playlistText);
+      const playlistOk =
+        playlist?.includes("#EXTINF") ||
+        playlist?.includes("#EXT-X-STREAM-INF");
 
-      const hasWidevine = playlistText.toLowerCase().includes("widevine");
-
-      const hasFairplay = /com\.apple\.streamingkeydelivery/i.test(
-        playlistText,
-      );
-
-      const isDrmProtected = hasSkd || hasWidevine || hasFairplay;
+      const isDrm =
+        /skd:\/\//i.test(playlist) ||
+        /widevine/i.test(playlist) ||
+        /fairplay/i.test(playlist);
 
       let ffmpeg;
       try {
         ffmpeg = await getFFmpegHealth(this, url);
-      } catch (err) {
-        ffmpeg = {
-          ok: false,
-          reason: "ffmpeg_failed",
-          raw: err?.message ?? null,
-        };
+      } catch (e) {
+        ffmpeg = { ok: false, raw: e?.message ?? "ffmpeg_exception" };
       }
 
-      const ffmpegBlocked =
-        ffmpeg.raw &&
-        /skd|drm|decryption|unauthorized|fairplay|widevine|streamingkeydelivery/i.test(
-          String(ffmpeg.raw),
-        );
+      const raw = String(ffmpeg.raw || "");
 
-      const ffmpegOk = ffmpeg.ok && !ffmpegBlocked && !isDrmProtected;
+      const ffmpegBlocked = /skd|unauthorized|decryption|access denied/i.test(
+        raw,
+      );
+      const ffmpegOk = Boolean(ffmpeg.ok) && !ffmpegBlocked;
 
-      result.ok = ffmpegOk;
+      const ok = ffmpegOk && playlistOk && !isDrm;
 
-      result.stage = isDrmProtected ? "drm" : "ffmpeg";
+      result.ok = ok;
+      result.stage = !ffmpegOk
+        ? "ffmpeg_failed"
+        : !playlistOk
+          ? "playlist_invalid"
+          : isDrm
+            ? "drm"
+            : "ok";
 
-      result.reason = result.reason = hasSkd
-        ? "drm_skd_not_supported"
-        : hasWidevine
-          ? "drm_widevine_not_supported"
-          : "drm_fairplay_not_supported";
+      if (!ffmpegOk) {
+        result.reason = "ffmpeg_failed";
+      } else if (!playlistOk) {
+        result.reason = "playlist_invalid";
+      } else if (isDrm) {
+        result.reason = "drm_protected";
+      } else {
+        result.reason = "ok";
+      }
 
       result.diagnostics = {
         ffmpegOk,
-        isDrmProtected,
-        raw: ffmpeg.raw ?? null,
+        isDrmProtected: isDrm,
+        playlistOk,
+        raw,
       };
 
       return result;
@@ -226,7 +231,7 @@ export class StreamEngine {
 
         const isStreamable = health.ok && !restricted && !isDrm;
 
-        const isLive = dto.metadata?.static === true ? true : dto.isLive;
+        const isLive = dto.isLive;
 
         return {
           stream: new StreamDTO({

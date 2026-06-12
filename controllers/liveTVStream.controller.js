@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 
-import { StreamEngine } from "../tvProviders/engine/StreamEngine.js";
-import { PROVIDER_ERROR } from "../tvProviders/errors/ProviderError.js";
+import { StreamEngine } from "../liveTVstreamCore/liveStream/engine/StreamEngine.js";
+import { PROVIDER_ERROR } from "../liveTVstreamCore/liveStream/errors/ProviderError.js";
 
 const engine = new StreamEngine({
   attempts: 2,

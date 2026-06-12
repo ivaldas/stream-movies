@@ -1,4 +1,7 @@
-import { ProviderError, PROVIDER_ERROR } from "./errors/ProviderError.js";
+import {
+  ProviderError,
+  PROVIDER_ERROR,
+} from "../liveStream/errors/ProviderError.js";
 
 export class BaseProvider {
   constructor(key, displayName, channels = {}) {

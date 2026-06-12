@@ -1,7 +1,10 @@
-import { LRTProvider } from "../LRTprovider.js";
-import { LNKProvider } from "../LNKprovider.js";
-import { TVPlayProvider } from "../TVPlayProvider.js";
-import { ProviderError, PROVIDER_ERROR } from "../errors/ProviderError.js";
+import { LRTProvider } from "../providers/LRTprovider.js";
+import { LNKProvider } from "../providers/LNKprovider.js";
+import { TVPlayProvider } from "../providers/TVPlayProvider.js";
+import {
+  ProviderError,
+  PROVIDER_ERROR,
+} from "../liveStream/errors/ProviderError.js";
 
 const providers = new Map();
 

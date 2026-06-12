@@ -1,7 +1,10 @@
 import { BaseProvider } from "./BaseProvider.js";
-import { ProviderError, PROVIDER_ERROR } from "./errors/ProviderError.js";
-import { StreamDTO } from "./dto/StreamDTO.contract.js";
-import { safeRequest } from "./tvProvider utils/safeRequest.js";
+import {
+  ProviderError,
+  PROVIDER_ERROR,
+} from "../liveStream/errors/ProviderError.js";
+import { StreamDTO } from "../liveStream/models/StreamDTO.contract.js";
+import { safeRequest } from "../tvStream utils/safeRequest.js";
 
 const API_URL = "https://www.lrt.lt/servisai/stream_url/live/get_live_url.php";
 
@@ -78,7 +81,8 @@ export class LRTProvider extends BaseProvider {
       streamUrl,
       backupStreamUrl,
       audioUrl,
-      expiresAt: expiry ? new Date(expiry) : null,
+      expiresAtMs: expiry ?? null,
+      isLive: true,
       metadata: {
         channel: channelKey,
         channelName: upstream.name,

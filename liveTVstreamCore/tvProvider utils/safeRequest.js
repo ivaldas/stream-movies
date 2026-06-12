@@ -1,7 +1,10 @@
 import axios from "axios";
 
-import { ProviderError, PROVIDER_ERROR } from "../errors/ProviderError.js";
-import { mapHttpError } from "../errors/httpErrorMapper.js";
+import {
+  ProviderError,
+  PROVIDER_ERROR,
+} from "../liveStream/errors/ProviderError.js";
+import { mapHttpError } from "../liveStream/errors/httpErrorMapper.js";
 
 export async function safeRequest({
   url,

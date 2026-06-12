@@ -1,8 +1,11 @@
 // import NodeCache from "node-cache";
 
 import { BaseProvider } from "./BaseProvider.js";
-import { ProviderError, PROVIDER_ERROR } from "./errors/ProviderError.js";
-import { StreamDTO } from "./dto/StreamDTO.contract.js";
+import {
+  ProviderError,
+  PROVIDER_ERROR,
+} from "../liveStream/errors/ProviderError.js";
+import { StreamDTO } from "../liveStream/models/StreamDTO.contract.js";
 // import { validateStream } from "../tvProviders/tvProvider utils/streamValidator.util.js";
 // import { safeRequest } from "./tvProvider utils/safeRequest.js";
 
@@ -75,7 +78,7 @@ export class TVPlayProvider extends BaseProvider {
 
     return new StreamDTO({
       streamUrl: upstream.streamUrl,
-      // isLive: Boolean(isStreamable),
+      isLive: true,
       metadata: {
         channel: channelKey,
         channelName: upstream.name,

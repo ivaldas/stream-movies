@@ -77,7 +77,7 @@ export class StreamDTO {
   constructor({
     streamUrl,
     type = STREAM_TYPES.HLS,
-    isLive = false,
+    isLive = null,
     isStreamable = false,
     audioUrl = null,
     backupStreamUrl = null,
@@ -89,7 +89,7 @@ export class StreamDTO {
 
     this.streamUrl = normalizeUrl(streamUrl, "streamUrl", { absolute: true });
     this.type = type;
-    this.isLive = Boolean(isLive);
+    this.isLive = isLive ?? null;
     this.isStreamable = Boolean(isStreamable);
     this.audioUrl = audioUrl ? normalizeUrl(audioUrl, "audioUrl") : null;
     this.backupStreamUrl = backupStreamUrl
@@ -97,7 +97,40 @@ export class StreamDTO {
       : null;
 
     this.expiresAtMs = normalizeExpires(expiresAtMs);
+    Object.defineProperty(this, "_expiresAtMs", {
+      value: normalizeExpires(expiresAtMs),
+      enumerable: false,
+    });
+
+    Object.defineProperty(this, "expiresAt", {
+      enumerable: true,
+      get: () =>
+        this._expiresAtMs != null ? new Date(this._expiresAtMs) : null,
+    });
+
     this.metadata = cloneMetadata(metadata);
     Object.freeze(this);
+  }
+  toJSON() {
+    const json = {
+      streamUrl: this.streamUrl,
+      type: this.type,
+      isLive: this.isLive,
+      isStreamable: this.isStreamable,
+      metadata: this.metadata,
+    };
+
+    const { expiresAt, audioUrl, backupStreamUrl } = this;
+    if (audioUrl != null) {
+      json.audioUrl = audioUrl;
+    }
+    if (backupStreamUrl != null) {
+      json.backupStreamUrl = backupStreamUrl;
+    }
+    if (expiresAt != null) {
+      json.expiresAt = expiresAt;
+    }
+
+    return json;
   }
 }
